@@ -13,7 +13,8 @@ Actions**, nikdy v kódu ani v chatu.
 | Secret | `IG_USER_ID` | Jen když token vidí víc účtů; úloha na to upozorní. |
 | Secret | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Klíč k bucketu R2 (jen tenhle bucket, čtení a zápis). |
 | Secret | `SOCIAL_ADMIN_TOKEN` | Volitelné: osobní token GitHubu s právem Secrets, aby se prodloužený token Instagramu uložil sám. |
-| Variable | `R2_ACCOUNT_ID` | Id účtu Cloudflare (je v adrese i v přehledu R2). |
+| Variable | `R2_ENDPOINT` | Adresa pro nahrávání (S3 API) z nastavení bucketu, např. `https://<účet>.eu.r2.cloudflarestorage.com`. Nutná u bucketu v EU. |
+| Variable | `R2_ACCOUNT_ID` | Id účtu Cloudflare; stačí místo `R2_ENDPOINT` jen u bucketu mimo EU. |
 | Variable | `R2_BUCKET` | Název bucketu, např. `venca-stamgast`. |
 | Variable | `R2_PUBLIC_URL` | Veřejná adresa bucketu, např. `https://pub-xxxx.r2.dev` (bez lomítka na konci). |
 | Variable | `VENCA_MODEL` | Volitelné: model Claude (výchozí `claude-sonnet-5-5`). |
@@ -34,7 +35,8 @@ Stejně jako u Pub League (`docs/social.md` v repozitáři hry):
 2. V nastavení bucketu zapni **Public access** (r2.dev subdomain, nebo vlastní doména) a adresu ulož
    jako variable `R2_PUBLIC_URL`.
 3. R2 → Manage API tokens → Create token: **Object Read & Write**, jen pro tenhle bucket. Klíče ulož jako
-   secrets `R2_ACCESS_KEY_ID` a `R2_SECRET_ACCESS_KEY`, id účtu jako variable `R2_ACCOUNT_ID`.
+   secrets `R2_ACCESS_KEY_ID` a `R2_SECRET_ACCESS_KEY`. Adresu S3 API z nastavení bucketu ulož jako variable
+   `R2_ENDPOINT` (u bucketu v EU má v adrese `.eu.`, bez ní by nahrávání selhalo).
 
 ## 3. Claude API
 

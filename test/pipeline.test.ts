@@ -162,3 +162,21 @@ describe('koncept a šablona', () => {
     }
   });
 });
+
+import { r2Endpoint, r2FromEnv } from '../src/storage.ts';
+
+describe('úložiště R2', () => {
+  const base = { R2_ACCESS_KEY_ID: 'a', R2_SECRET_ACCESS_KEY: 'b', R2_BUCKET: 'venca-stamgast', R2_PUBLIC_URL: 'https://pub-x.r2.dev/' };
+
+  it('bucket v EU má adresu z R2_ENDPOINT', () => {
+    expect(r2FromEnv({ ...base, R2_ENDPOINT: 'https://abc.eu.r2.cloudflarestorage.com/' }).endpoint).toBe('https://abc.eu.r2.cloudflarestorage.com');
+  });
+
+  it('bez R2_ENDPOINT se adresa složí z účtu', () => {
+    expect(r2Endpoint({ R2_ACCOUNT_ID: 'abc' })).toBe('https://abc.r2.cloudflarestorage.com');
+  });
+
+  it('chybějící nastavení řekne co', () => {
+    expect(() => r2FromEnv({ R2_BUCKET: 'x' })).toThrow(/R2_ENDPOINT/);
+  });
+});
