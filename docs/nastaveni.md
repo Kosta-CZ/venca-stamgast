@@ -20,7 +20,7 @@ Actions**, nikdy v kódu ani v chatu.
 | Variable | `VENCA_MODEL` | Volitelné: model Claude (výchozí `claude-sonnet-5-5`). |
 | Variable | `AUTO_RANNI_PIVO` | `true` = Ranní pivo vyjde samo, když kontrola nic nenajde. Bez toho čeká na schválení. |
 | Secret | `TELEGRAM_BOT_TOKEN` | Token bota z @BotFather (schvalování v Telegramu). |
-| Variable | `TELEGRAM_CHAT_ID` | Tvoje Telegram ID (číslo): jen ty smíš schvalovat. |
+| Variable (nebo Secret) | `TELEGRAM_CHAT_ID` | Tvoje Telegram ID (číslo): jen ty smíš schvalovat. |
 | Secret | `CLOUDFLARE_API_TOKEN` | Token Cloudflare (šablona „Edit Cloudflare Workers“) pro nasazení bota. |
 | Variable | `CLOUDFLARE_ACCOUNT_ID` | Id účtu Cloudflare. |
 | Secret | `BOT_GITHUB_TOKEN` | Token GitHubu jen s právem **Actions** na tento repozitář: bot jím spouští vydání. |
