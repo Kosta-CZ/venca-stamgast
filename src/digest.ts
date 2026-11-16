@@ -86,15 +86,27 @@ export const DIGEST_SYSTEM =
   'Jsi pečlivý sportovní redaktor. Dohledáváš výsledky českých sportovců ve zdrojích, které máš povolené. '
   + 'Vycházíš jen z toho, co ve zdrojích opravdu najdeš: nic nedomýšlíš, nic nedopočítáváš a nic nedoplňuješ z paměti. Odpovídáš jen platným JSON.';
 
+/** Tvar jednoho výkonu v odpovědi (JSON). */
+function itemShape(sport: DigestSport): string {
+  return sport === 'tenis'
+    ? '{"hrac": "jméno Čecha/Češky", "turnaj": "název turnaje", "kolo": "kolo turnaje, např. 2. kolo, čtvrtfinále", "datum": "YYYY-MM-DD (den zápasu podle místa konání)", "souper": "jméno soupeře", "skore": "skóre po setech z pohledu Čecha, např. 6:4 3:6 7:6", "vyhra": true}'
+    : '{"hrac": "jméno Čecha", "tym": "jeho tým", "soutez": "liga nebo pohár", "datum": "YYYY-MM-DD (den zápasu podle místa konání)", "souper": "soupeř", "skore": "konečné skóre z pohledu Čechova týmu, např. 4:2", "vyhra": true, "goly": 1, "asistence": 0}';
+}
+
+const answerShape = (sport: DigestSport) => `Vrať jen tento JSON, bez textu okolo:
+{"vykony": [${itemShape(sport)}], "zdroje": ["adresy stránek, ze kterých údaje máš"], "poznamka": "jednou větou, jen když je něco nejisté; jinak prázdné"}
+Když nic nenajdeš, vrať {"vykony": [], "zdroje": [], "poznamka": "proč"}.`;
+
+/** Zadání prvního hledání (české zdroje): najít výkony v období, se seznamem hráčů po hráčích. */
 export function digestPrompt(cfg: DigestConfig, p: { from: string; to: string }, domains: readonly string[]): string {
   const tennis = cfg.sport === 'tenis';
   const what = tennis
     ? 'všechny zápasy českých tenistů a tenistek ve dvouhře (hlavní soutěž turnajů ATP a WTA včetně grandslamů)'
     : `zápasy, ve kterých český ${cfg.sport === 'hokej' ? 'hokejista' : 'fotbalista'} dal gól nebo měl asistenci`;
-  const players = cfg.hraci?.length ? `\nHledej hlavně tyto hráče (ale nejen je): ${cfg.hraci.join(', ')}.` : '';
-  const item = tennis
-    ? '{"hrac": "jméno Čecha/Češky", "turnaj": "název turnaje", "kolo": "kolo turnaje, např. 2. kolo, čtvrtfinále", "datum": "YYYY-MM-DD (den zápasu podle místa konání)", "souper": "jméno soupeře", "skore": "skóre po setech z pohledu Čecha, např. 6:4 3:6 7:6", "vyhra": true}'
-    : '{"hrac": "jméno Čecha", "tym": "jeho tým", "soutez": "liga nebo pohár", "datum": "YYYY-MM-DD (den zápasu podle místa konání)", "souper": "soupeř", "skore": "konečné skóre z pohledu Čechova týmu, např. 4:2", "vyhra": true, "goly": 1, "asistence": 0}';
+  // Hledání „všichni Češi za týden“ je moc široké a skončí na limitu; po hráčích to jde (jedno hledání na hráče).
+  const players = cfg.hraci?.length
+    ? `\nPostupuj po hráčích z tohoto seznamu, na každého stačí jedno hledání (jméno a klub; hráče ze stejného klubu hledej spolu): ${cfg.hraci.join('; ')}. Další Čechy přidej, jen když na ně při hledání narazíš.`
+    : '';
   return `${cfg.zadani}${players}
 
 Najdi ${what} od ${p.from} do ${p.to} (včetně).
@@ -102,9 +114,37 @@ Hledej jen na těchto webech: ${domains.join(', ')}.
 ${cfg.vyloucit.length ? `Nikdy nezahrnuj: ${cfg.vyloucit.join(', ')}.\n` : ''}
 Každý zápas uveď zvlášť. Čísla opisuj přesně ze zdroje; zápas, u kterého si nejsi jistý, vynech a napiš ho do "poznamka".
 
-Vrať jen tento JSON, bez textu okolo:
-{"vykony": [${item}], "zdroje": ["adresy stránek, ze kterých údaje máš"], "poznamka": "jednou větou, jen když je něco nejisté; jinak prázdné"}
-Když nic nenajdeš, vrať {"vykony": [], "zdroje": [], "poznamka": "proč"}.`;
+${answerShape(cfg.sport)}`;
+}
+
+/**
+ * Zadání druhého hledání (mezinárodní zdroje): jen KTERÉ zápasy ověřit (hráč, tým, soutěž, den, soupeř),
+ * bez čísel. Skóre, výsledek, góly a asistence musí druhé hledání najít ve svých zdrojích samo; kód je pak
+ * porovná s prvním. Ověřit pár známých zápasů stojí zlomek hledání naslepo.
+ */
+export function verifyPrompt(cfg: DigestConfig, p: { from: string; to: string }, domains: readonly string[], candidates: readonly Performance[]): string {
+  const tennis = cfg.sport === 'tenis';
+  const list = candidates
+    .map((c) => (tennis
+      ? `- ${c.player}: ${[c.competition, c.stage].filter(Boolean).join(', ') || 'turnaj ?'}, ${c.date}, soupeř ${c.opponent || '?'}`
+      : `- ${c.player} (${c.team || 'klub ?'}): ${c.competition || 'soutěž ?'}, ${c.date}, soupeř ${c.opponent || '?'}`))
+    .join('\n');
+  const numbers = tennis ? 'skóre po setech a kdo vyhrál' : 'konečné skóre, výsledek a kolik gólů a asistencí v něm hráč měl';
+  return `Ověř tyto zápasy (období ${p.from} až ${p.to}):
+${list}
+
+Hledej jen na těchto webech: ${domains.join(', ')}.
+U každého zápasu, který ve zdroji najdeš, opiš ze zdroje ${numbers}. Datum piš podle místa konání.
+Nic nedopočítávej a nedoplňuj z paměti. Zápas, který ve zdrojích nenajdeš, vynech. Jiné zápasy nepřidávej.
+
+${answerShape(cfg.sport)}`;
+}
+
+/** Výkony, které do přehledu vůbec můžou: bez vyloučených soutěží (KHL) a v období (±1 den kvůli pásmům). */
+export function usableItems(cfg: Pick<DigestConfig, 'vyloucit'>, items: readonly Performance[], p: { from: string; to: string }): Performance[] {
+  const banned = (x: Performance) => cfg.vyloucit.some((v) => ascii(`${x.competition} ${x.team}`).includes(ascii(v)));
+  const inPeriod = (x: Performance) => x.date >= addDays(p.from, -1) && x.date <= addDays(p.to, 1);
+  return items.filter((x) => !banned(x) && inPeriod(x));
 }
 
 const s = (v: unknown): string => (typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '');
@@ -165,10 +205,7 @@ const perfLabel = (p: Performance) => `${p.player} (${p.date}, ${p.opponent} ${p
  */
 export function confirmDigest(cfg: Pick<DigestConfig, 'vyloucit' | 'sport'>, a: DigestReport, b: DigestReport, p: { from: string; to: string }): ConfirmedDigest {
   const pozor: string[] = [];
-  const banned = (x: Performance) => cfg.vyloucit.some((v) => ascii(`${x.competition} ${x.team}`).includes(ascii(v)));
-  const inPeriod = (x: Performance) => x.date >= addDays(p.from, -1) && x.date <= addDays(p.to, 1);
-  const clean = (r: DigestReport) => r.items.filter((x) => !banned(x) && inPeriod(x));
-  const [la, lb] = [clean(a), clean(b)];
+  const [la, lb] = [usableItems(cfg, a.items, p), usableItems(cfg, b.items, p)];
   const used = new Set<Performance>();
   const items: Performance[] = [];
   let single = 0;
@@ -276,9 +313,9 @@ interface GroupResult {
   error?: string;
 }
 
-async function searchGroup(io: ClaudeIo, label: string, cfg: DigestConfig, domains: string[], p: { from: string; to: string }, log: (l: string) => void): Promise<GroupResult> {
+async function searchGroup(io: ClaudeIo, label: string, user: string, domains: string[], limits: { searches: number; fetches: number }, log: (l: string) => void): Promise<GroupResult> {
   try {
-    const a = await askWithSearch(io, { system: DIGEST_SYSTEM, user: digestPrompt(cfg, p, domains), domains, maxSearches: cfg.hledani ?? 10, maxFetches: cfg.stranky ?? 8 }, (l) => log(`[${label}] ${l}`));
+    const a = await askWithSearch(io, { system: DIGEST_SYSTEM, user, domains, maxSearches: limits.searches, maxFetches: limits.fetches }, (l) => log(`[${label}] ${l}`));
     try {
       return { report: parseDigest(a.text), seen: a.seen };
     } catch {
@@ -292,19 +329,27 @@ async function searchGroup(io: ClaudeIo, label: string, cfg: DigestConfig, domai
 }
 
 /**
- * Celý přehled: dvě nezávislá hledání, porovnání a řádky do grafiky. `errors` nese hledání,
+ * Celý přehled: dvě hledání ve dvou skupinách zdrojů, porovnání a řádky do grafiky. `errors` nese hledání,
  * která selhala (bez obou hledání se nic potvrdit nedá, úloha to má hlásit jako chybu).
  *
- * Hledá se postupně: nejdřív české zdroje (B). Když nenajdou nic (nebo selžou), mezinárodní (A)
- * se nespouští, protože bez obou zdrojů se stejně nic nepotvrdí; prázdný týden tak stojí půlku.
- * A o výsledcích B nic neví, hledání zůstávají nezávislá.
+ * Postup kvůli ceně a úspěšnosti: české zdroje (B) najdou výkony (po hráčích ze seznamu). Mezinárodní (A)
+ * dostanou jen to, které zápasy ověřit (hráč, tým, soutěž, den, soupeř), čísla (skóre, výsledek, góly,
+ * asistence) musí najít samy a kód je porovná. Když B nic nenajde (nebo selže), A se nespouští.
  */
 export async function findDigest(io: ClaudeIo, cfg: DigestConfig, today: string, log: (l: string) => void = () => {}): Promise<{ facts: DigestFacts; pozor: string[]; errors: string[] }> {
   const p = period(cfg, today);
-  const b = await searchGroup(io, 'B', cfg, cfg.zdroje_b, p, log);
-  const skipA = Boolean(b.error) || b.report.items.length === 0;
-  if (skipA) log('[A] České zdroje nic nenašly, mezinárodní hledání vynechávám (bez dvou zdrojů se nic nepotvrdí).');
-  const a: GroupResult = skipA ? { report: { ...EMPTY }, seen: [] } : await searchGroup(io, 'A', cfg, cfg.zdroje_a, p, log);
+  const limits = { searches: cfg.hledani ?? 10, fetches: cfg.stranky ?? 8 };
+  const b = await searchGroup(io, 'B', digestPrompt(cfg, p, cfg.zdroje_b), cfg.zdroje_b, limits, log);
+  const candidates = b.error ? [] : usableItems(cfg, b.report.items, p);
+  let a: GroupResult = { report: { ...EMPTY }, seen: [] };
+  if (!candidates.length) {
+    log('[A] České zdroje nic nenašly, mezinárodní hledání vynechávám (bez dvou zdrojů se nic nepotvrdí).');
+  } else {
+    // Ověření známých zápasů: na každý stačí pár hledání a stránek.
+    const n = candidates.length;
+    const verify = { searches: Math.min(limits.searches, 2 * n + 2), fetches: Math.min(limits.fetches, 2 * n + 2) };
+    a = await searchGroup(io, 'A', verifyPrompt(cfg, p, cfg.zdroje_a, candidates), cfg.zdroje_a, verify, log);
+  }
   const pozor: string[] = [];
   const sources = [...goodSources('Zdroje A', a.report.sources, cfg.zdroje_a, a.seen, pozor), ...goodSources('Zdroje B', b.report.sources, cfg.zdroje_b, b.seen, pozor)];
   const c = confirmDigest(cfg, a.report, b.report, p);

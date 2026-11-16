@@ -1,7 +1,9 @@
-# Přehledy ze dvou zdrojů (data/prehledy/*.json): legionáři a Češi ve fotbale v cizině v pondělí. Tenis (denně)
-# je od 17. 11. 2026 vypnutý kvůli ceně (rozhodnutí majitele); jde spustit ručně, zapne se vrácením řádku cron.
-# Výkony dohledá Claude API dvakrát nezávisle (mezinárodní a české zdroje); do grafiky jde jen to, co sedí
-# v obou. Koncept jde ke schválení do Telegramu (✅ Vydat / 🗑 Zahodit, vydává vydat.yml), nikdy nevychází sám.
+# Přehledy ze dvou zdrojů (data/prehledy/*.json): Češi ve fotbale v cizině v pondělí. Vypnuté (rozhodnutí majitele
+# 17. 11. 2026): tenis (denně) kvůli ceně a hokejoví legionáři, protože česká média o nich zápas po zápasu nepíšou
+# (NHL je v Ranním pivu). Ručně jdou spustit dál, zapnou se vrácením řádku cron.
+# Výkony najde Claude API v českých zdrojích (po hráčích ze seznamu), mezinárodní zdroje je ověří (čísla dohledají
+# samy); do grafiky jde jen to, co sedí v obou. Koncept jde ke schválení do Telegramu (✅ Vydat / 🗑 Zahodit,
+# vydává vydat.yml), nikdy nevychází sám.
 #
 # Ruční spuštění: Run workflow, vybrat přehled, volitelně den (přehled končí dnem předtím).
 
@@ -10,15 +12,15 @@ name: Přehledy
 on:
   schedule:
     # - cron: '23 8 * * *'  # tenis: 9:23 v zimě, včerejší zápasy (zatím vypnutý kvůli ceně)
-    - cron: '23 9 * * 1'    # legionáři: pondělí 10:23, minulý týden
+    # - cron: '23 9 * * 1'  # legionáři: pondělí 10:23, minulý týden (vypnutí: nejsou zdroje)
     - cron: '23 10 * * 1'   # Češi v cizině: pondělí 11:23, minulý týden
   workflow_dispatch:
     inputs:
       prehled:
         description: 'Který přehled'
         type: choice
-        options: [legionari, cizina, tenis]
-        default: legionari
+        options: [cizina, legionari, tenis]
+        default: cizina
       date:
         description: 'Den běhu YYYY-MM-DD (prázdné = dnes; přehled končí dnem předtím)'
         required: false

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  checkDigestVenca, confirmDigest, digestCaption, digestFacts, digestRows, digestUserMessage, findDigest, isActive, parseDigest, period, periodLabel, scoreKey,
+  checkDigestVenca, confirmDigest, digestCaption, digestFacts, digestPrompt, digestRows, digestUserMessage, findDigest, isActive, parseDigest, period, periodLabel, scoreKey,
   type DigestConfig, type DigestReport, type Performance,
 } from '../src/digest.ts';
 import { digestHtml, MAX_ROWS } from '../src/render/digest.ts';
@@ -104,9 +104,11 @@ describe('přehledy: dvě nezávislá hledání', () => {
         ],
       };
     };
+    const prompts: string[] = [];
     const f = vi.fn(async (_u: unknown, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body));
       bodies.push(body.tools[0].allowed_domains);
+      prompts.push(String(body.messages[0].content));
       return new Response(JSON.stringify(reply(body.tools[0].allowed_domains)), { headers: { 'content-type': 'application/json' } });
     });
     const r = await findDigest({ fetch: f as unknown as typeof fetch, apiKey: 'k', model: 'claude-sonnet-5-5' }, LEG, '2026-11-23');
@@ -114,7 +116,24 @@ describe('přehledy: dvě nezávislá hledání', () => {
     expect(r.errors).toEqual([]);
     expect(r.facts.rows).toEqual([expect.objectContaining({ player: 'David Kämpf', value: '1+1' })]);
     expect(r.facts.sources).toHaveLength(2);
-    expect(bodies).toEqual(expect.arrayContaining([LEG.zdroje_a, LEG.zdroje_b]));
+    // Nejdřív české zdroje (najdou), pak mezinárodní (ověří).
+    expect(bodies).toEqual([LEG.zdroje_b, LEG.zdroje_a]);
+    // Ověření dostane jen který zápas (hráč, den, soupeř), čísla musí najít samo.
+    expect(prompts[1]).toContain('Ověř tyto zápasy');
+    // Seznam zápasů k ověření (před pokyny a ukázkou JSON) nesmí nést skóre ani body z prvního hledání.
+    const list = prompts[1]!.split('Hledej jen')[0]!;
+    expect(list).toContain('- David Kämpf (Rögle): SHL, 2026-11-18, soupeř Frölunda\n');
+    expect(list).not.toContain('4:2');
+    expect(list).not.toMatch(/1\+1|gól|asist/);
+  });
+
+  it('přehled Čechů v cizině hledá po hráčích ze seznamu', () => {
+    const cizina = load('cizina');
+    expect(cizina.hraci?.length).toBeGreaterThan(10);
+    const prompt = digestPrompt(cizina, period(cizina, '2026-11-23'), cizina.zdroje_b);
+    expect(prompt).toContain('Postupuj po hráčích');
+    expect(prompt).toContain('Patrik Schick (Bayer Leverkusen)');
+    expect(cizina.zdroje_a).not.toContain('bbc.com');
   });
 
   it('chyba API (došlý kredit) se hlásí jako chyba, ne jako „nic se nenašlo“; týdenní přehled smí hledat víc', async () => {

@@ -20,7 +20,7 @@ komentáře česky.
 4. `.github/workflows/fotbal.yml` v pondělí ráno vyrobí kolo fotbalové 1. ligy stejným kódem jako Kotel
    (`src/leagues.ts`; v textech vždy „1. liga“, oficiální název nese jméno sázkové kanceláře).
    `.github/workflows/prehledy.yml` dělá přehledy ze dvou zdrojů (`src/digest.ts`, `data/prehledy/*.json`):
-   hokejoví legionáři a Češi ve fotbale v cizině v pondělí (tenis denně je kvůli ceně zatím vypnutý).
+   Češi ve fotbale v cizině v pondělí (tenis kvůli ceně a hokejoví legionáři kvůli chybějícím zdrojům jsou vypnutí).
 5. `.github/workflows/specialy.yml` dělá speciál k velké akci Čecha podle `data/specialy/*.json`: odpoledne pozvánku,
    po zápase výsledek (`src/special.ts`, šablona `src/render/special.ts`). Fakta ze dvou nezávislých hledání
    (mezinárodní a české zdroje), kód je porovná údaj po údaji. Obě verze se schvalují v Telegramu.
@@ -105,12 +105,14 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
 - **1. liga** (`fotbal.yml`): pondělí 7:53 (čeká, až se kolo dohraje), záloha v úterý; kolo starší než 3 dny
   (po reprezentační pauze) se neposílá. TheSportsDB liga 4631, kola v R2 `liga/<sezóna>/`, id `<den>-liga`.
   Tabulka po 14. kole sedí s ČTK (test). Nadstavba po 30. kole (skupiny) zatím počítaná není.
-- **Přehledy** (`prehledy.yml`): legionáři (SHL, Liiga, DEL, National League, ICEHL, AHL; **KHL nikdy**) a Češi
-  v cizině v pondělí. Tenis denně 9:23 je od 17. 11. vypnutý kvůli ceně (rozhodnutí majitele; v
-  `data/prehledy/tenis.json` je období do konce Australian Open, zapíná se řádkem `cron`).
-  Volná strukturovaná data k nim nejsou: výkony dohledá Claude dvakrát nezávisle (zdroje A mezinárodní,
-  B české) a do grafiky jde jen to, co sedí v obou (hráč, den ±1, soupeř, skóre, góly/asistence, výsledek).
-  Kvůli ceně postupně: nejdřív B, A jen když B něco našlo (A o výsledcích B neví).
+- **Přehledy** (`prehledy.yml`): Češi ve fotbale v cizině v pondělí 11:23. Volná strukturovaná data nejsou:
+  české zdroje (B) hledají po hráčích ze seznamu `hraci` v `data/prehledy/cizina.json` (udržuje se ručně, přestupy
+  v lednu a v létě), mezinárodní (A) dostanou jen to, které zápasy ověřit (hráč, tým, soutěž, den, soupeř) a čísla
+  (skóre, výsledek, góly, asistence) dohledají samy. Do grafiky jde jen to, co sedí v obou. Když B nic nenajde,
+  A se nespouští.
+- Vypnuté (rozhodnutí majitele 17. 11. 2026, zapínají se řádkem `cron`): tenis denně 9:23 kvůli ceně
+  (`data/prehledy/tenis.json`, období do konce Australian Open) a hokejoví legionáři (SHL, Liiga, DEL, National
+  League, ICEHL, AHL; **KHL nikdy**), protože česká média o nich zápas po zápasu nepíšou; NHL je v Ranním pivu.
 
 ### Cena (měřeno 16. 11. 2026, Claude API, data jsou zdarma)
 
@@ -119,8 +121,7 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
   (strop 8 hledání a 8 stránek). Kolo ligy asi 4,4 Kč, Kotel 3,4 Kč (hledání střelců $0.12–0.17, texty ~$0.03),
   Ranní pivo pod 1 Kč, přehled 4–9 Kč (každé hledání $0.01). Výsledek speciálu: nejdřív mezinárodní zdroje,
   české jen když výsledek už mají.
-- Známý problém (16. 11.): přehledy legionářů a Čechů v cizině ve zkouškách nenašly nic ani v běžném týdnu
-  (česká média o legionářích zápas po zápasu nepíšou; hledání „všichni Češi za týden“ je moc široké).
+- Hledání „všichni Češi za týden“ bylo moc široké a nic nenašlo; proto seznam hráčů a ověřování konkrétních zápasů.
 
 ### Plán dál (dohodnuto s majitelem 16. 11. 2026)
 
