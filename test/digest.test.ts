@@ -111,9 +111,26 @@ describe('přehledy: dvě nezávislá hledání', () => {
     });
     const r = await findDigest({ fetch: f as unknown as typeof fetch, apiKey: 'k', model: 'claude-sonnet-5-5' }, LEG, '2026-11-23');
     expect(r.pozor).toEqual([]);
+    expect(r.errors).toEqual([]);
     expect(r.facts.rows).toEqual([expect.objectContaining({ player: 'David Kämpf', value: '1+1' })]);
     expect(r.facts.sources).toHaveLength(2);
     expect(bodies).toEqual(expect.arrayContaining([LEG.zdroje_a, LEG.zdroje_b]));
+  });
+
+  it('chyba API (došlý kredit) se hlásí jako chyba, ne jako „nic se nenašlo“; týdenní přehled smí hledat víc', async () => {
+    const limits: number[] = [];
+    const f = vi.fn(async (_u: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      limits.push(body.tools[0].max_uses);
+      const json = body.tools[0].allowed_domains.includes('hokej.cz')
+        ? { type: 'error', error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API.' } }
+        : { id: 'm', type: 'message', role: 'assistant', model: 'm', stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: 'text', text: '{"vykony": [], "zdroje": [], "poznamka": ""}' }] };
+      return new Response(JSON.stringify(json), { status: 'error' in json ? 400 : 200, headers: { 'content-type': 'application/json' } });
+    });
+    const r = await findDigest({ fetch: f as unknown as typeof fetch, apiKey: 'k', model: 'm' }, LEG, '2026-11-23');
+    expect(r.errors).toEqual([expect.stringContaining('Došel kredit Claude API')]);
+    expect(r.facts.rows).toEqual([]);
+    expect(limits).toEqual([16, 16]);
   });
 });
 

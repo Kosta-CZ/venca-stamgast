@@ -84,7 +84,7 @@ ${hockey
     : 'Vlastní gól zapiš k týmu, kterému se započítal, jako "Příjmení (vl.)" (jméno hráče, který si ho dal).'}
 - "rozhodujici_najezd": ${hockey ? 'u zápasu rozhodnutého nájezdy hráč, který proměnil rozhodující nájezd, jinak null' : 'vždy null'},
 - "zdroje": adresy článků, ze kterých jsi střelce vzal (jen stránky, které jsi opravdu našel nebo otevřel),
-- "poznamka": prázdná, nebo krátce, když je střelec nebo počet gólů nejistý (zdroje se liší, údaj chybí). Překlepy ve zdroji, které na střelce nemají vliv, nepiš.
+- "poznamka": prázdná, nebo krátce, když je střelec nebo počet gólů nejistý (zdroje se liší, údaj chybí). Překlepy ve zdroji, které na střelce nemají vliv, nepiš. Penalty, vlastní góly, minuty ani průběh zápasu sem nepatří, když jsou ve zdroji jasně.
 
 Když zápas ve zdrojích nenajdeš, nech seznamy střelců prázdné a do "poznamka" napiš proč. Nehádej.
 

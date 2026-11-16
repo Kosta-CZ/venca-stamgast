@@ -25,6 +25,19 @@ function client(io: ClaudeIo, maxRetries = 4): Anthropic {
 const describe = (m: Message, text: string) =>
   `Claude (${m.model}): konec ${m.stop_reason ?? '?'}, bloky ${[...new Set(m.content.map((c) => c.type))].join(', ') || 'žádné'}, ${text.length} znaků textu.`;
 
+/** Spotřeba tokenů do logu (podle ní se dá odhadnout, kolik který běh stojí kredit). */
+const inputTokens = (u: Anthropic.Beta.BetaUsage) => u.input_tokens + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+const kilo = (n: number) => (n >= 10000 ? `${Math.round(n / 1000)} tis.` : String(n));
+const tokenText = (input: number, output: number) => `Tokeny: vstup ${kilo(input)}, výstup ${kilo(output)}.`;
+
+/** Srozumitelná chyba API (došlý kredit, odmítnutý klíč); klíč samotný se nikdy nevypisuje. */
+export function apiError(err: unknown): Error {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/credit balance is too low/i.test(msg)) return new Error('Došel kredit Claude API (dobití: console.anthropic.com, Plans & Billing).');
+  if (/authentication_error|invalid x-api-key/i.test(msg)) return new Error('Claude API odmítlo klíč ANTHROPIC_API_KEY.');
+  return err instanceof Error ? err : new Error(msg);
+}
+
 const textOf = (blocks: readonly Block[]) => blocks.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text').map((b) => b.text).join('');
 
 /** Jednoduchý dotaz bez nástrojů: vrátí text odpovědi. */
@@ -36,9 +49,11 @@ export async function askClaude(io: ClaudeIo, system: string, user: string, log:
     messages: [{ role: 'user', content: user }],
     betas: BETAS,
     fallbacks: 'default',
+  }).catch((err: unknown) => {
+    throw apiError(err);
   });
   const text = textOf(m.content);
-  log(describe(m, text));
+  log(`${describe(m, text)} ${tokenText(inputTokens(m.usage), m.usage.output_tokens)}`);
   return text;
 }
 
@@ -111,6 +126,8 @@ export async function askWithSearch(io: ClaudeIo, ask: SearchAsk, log: (line: st
   const all: Block[] = [];
   let searches = 0;
   let fetches = 0;
+  let tokensIn = 0;
+  let tokensOut = 0;
   let m: Message | undefined;
   for (let turn = 0; turn < 6; turn++) {
     try {
@@ -132,18 +149,20 @@ export async function askWithSearch(io: ClaudeIo, ask: SearchAsk, log: (line: st
         turn--;
         continue;
       }
-      throw err;
+      throw apiError(err);
     }
     all.push(...m.content);
     searches += m.usage.server_tool_use?.web_search_requests ?? 0;
     fetches += m.usage.server_tool_use?.web_fetch_requests ?? 0;
+    tokensIn += inputTokens(m.usage);
+    tokensOut += m.usage.output_tokens;
     if (m.stop_reason !== 'pause_turn') break;
     log('Claude hledá dlouho (pause_turn), pokračuji.');
     messages.push({ role: 'assistant', content: m.content });
   }
   if (!m) throw new Error('Claude neodpověděl.');
   const text = finalText(all);
-  log(`${describe(m, text)} Hledání ${searches}×, stažené stránky ${fetches}×.`);
+  log(`${describe(m, text)} Hledání ${searches}×, stažené stránky ${fetches}×. ${tokenText(tokensIn, tokensOut)}`);
   return { text, seen: seenUrls(all), searches, fetches, model: m.model, stopReason: m.stop_reason };
 }
 

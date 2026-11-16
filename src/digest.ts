@@ -30,6 +30,9 @@ export interface DigestConfig {
   zdroje_a: string[];
   zdroje_b: string[];
   hashtagy: string[];
+  /** Nejvýš hledání a stažených stránek na jednu skupinu zdrojů (výchozí 10 a 8; víc = dražší běh). */
+  hledani?: number;
+  stranky?: number;
   /** Období, kdy přehled běží (YYYY-MM-DD, nepovinné): mimo něj úloha nic nehledá. */
   od?: string;
   do?: string;
@@ -266,9 +269,16 @@ export function digestRows(sport: DigestSport, items: readonly Performance[]): D
 
 const EMPTY: DigestReport = { items: [], sources: [], note: '' };
 
-async function searchGroup(io: ClaudeIo, label: string, cfg: DigestConfig, domains: string[], p: { from: string; to: string }, log: (l: string) => void): Promise<{ report: DigestReport; seen: string[] }> {
+interface GroupResult {
+  report: DigestReport;
+  seen: string[];
+  /** Hledání vůbec neproběhlo (chyba API, třeba došlý kredit): to není „nic se nenašlo“. */
+  error?: string;
+}
+
+async function searchGroup(io: ClaudeIo, label: string, cfg: DigestConfig, domains: string[], p: { from: string; to: string }, log: (l: string) => void): Promise<GroupResult> {
   try {
-    const a = await askWithSearch(io, { system: DIGEST_SYSTEM, user: digestPrompt(cfg, p, domains), domains, maxSearches: 10, maxFetches: 8 }, (l) => log(`[${label}] ${l}`));
+    const a = await askWithSearch(io, { system: DIGEST_SYSTEM, user: digestPrompt(cfg, p, domains), domains, maxSearches: cfg.hledani ?? 10, maxFetches: cfg.stranky ?? 8 }, (l) => log(`[${label}] ${l}`));
     try {
       return { report: parseDigest(a.text), seen: a.seen };
     } catch {
@@ -276,18 +286,23 @@ async function searchGroup(io: ClaudeIo, label: string, cfg: DigestConfig, domai
       return { report: { ...EMPTY, note: `odpověď zdrojů ${label} není čitelný JSON` }, seen: a.seen };
     }
   } catch (err) {
-    return { report: { ...EMPTY, note: `hledání ve zdrojích ${label} selhalo: ${err instanceof Error ? err.message : String(err)}` }, seen: [] };
+    const error = `hledání ve zdrojích ${label} selhalo: ${err instanceof Error ? err.message : String(err)}`;
+    return { report: { ...EMPTY, note: error }, seen: [], error };
   }
 }
 
-/** Celý přehled: dvě nezávislá hledání, porovnání a řádky do grafiky. */
-export async function findDigest(io: ClaudeIo, cfg: DigestConfig, today: string, log: (l: string) => void = () => {}): Promise<{ facts: DigestFacts; pozor: string[] }> {
+/**
+ * Celý přehled: dvě nezávislá hledání, porovnání a řádky do grafiky. `errors` nese hledání,
+ * která selhala (bez obou hledání se nic potvrdit nedá, úloha to má hlásit jako chybu).
+ */
+export async function findDigest(io: ClaudeIo, cfg: DigestConfig, today: string, log: (l: string) => void = () => {}): Promise<{ facts: DigestFacts; pozor: string[]; errors: string[] }> {
   const p = period(cfg, today);
   const [a, b] = await Promise.all([searchGroup(io, 'A', cfg, cfg.zdroje_a, p, log), searchGroup(io, 'B', cfg, cfg.zdroje_b, p, log)]);
   const pozor: string[] = [];
   const sources = [...goodSources('Zdroje A', a.report.sources, cfg.zdroje_a, a.seen, pozor), ...goodSources('Zdroje B', b.report.sources, cfg.zdroje_b, b.seen, pozor)];
   const c = confirmDigest(cfg, a.report, b.report, p);
-  return { facts: digestFacts(cfg, p, c.items, sources), pozor: [...c.pozor, ...pozor] };
+  const errors = [a.error, b.error].filter((x): x is string => Boolean(x));
+  return { facts: digestFacts(cfg, p, c.items, sources), pozor: [...c.pozor, ...pozor], errors };
 }
 
 export function digestFacts(cfg: DigestConfig, p: { from: string; to: string }, items: Performance[], sources: string[]): DigestFacts {

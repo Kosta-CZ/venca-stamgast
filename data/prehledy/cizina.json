@@ -8,5 +8,7 @@
   "vyloucit": ["Chance Liga", "Fortuna liga", "1. liga"],
   "zdroje_a": ["espn.com", "bbc.com", "skysports.com", "uefa.com", "bundesliga.com", "premierleague.com", "transfermarkt.com"],
   "zdroje_b": ["isport.blesk.cz", "sport.cz", "ceskenoviny.cz", "sport.ceskatelevize.cz", "fotbal.cz"],
-  "hashtagy": ["#fotbal", "#CesiVCizine", "#legionari"]
+  "hashtagy": ["#fotbal", "#CesiVCizine", "#legionari"],
+  "hledani": 16,
+  "stranky": 12
 }

@@ -141,7 +141,8 @@ jobs:
         if: failure()
         env:
           ID: ${{ steps.what.outputs.id }}
+          WHY: ${{ steps.make.outputs.error }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           [ -d node_modules ] || npm ci
-          npm run -s venca -- notify --text "❌ Přehled $ID se nepovedlo vyrobit. Podrobnosti: $RUN_URL" || true
+          npm run -s venca -- notify --text "❌ Přehled $ID se nepovedlo vyrobit. ${WHY:+$WHY }Podrobnosti: $RUN_URL" || true

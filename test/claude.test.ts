@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { askClaude, askWithSearch, blockedDomains, normalizeUrl, onDomains } from '../src/claude.ts';
+import { apiError, askClaude, askWithSearch, blockedDomains, normalizeUrl, onDomains } from '../src/claude.ts';
 import { SCORER_DOMAINS } from '../src/scorers.ts';
 
 const usage = (search = 0, fetch = 0) => ({ input_tokens: 10, output_tokens: 5, server_tool_use: { web_search_requests: search, web_fetch_requests: fetch } });
@@ -70,6 +70,19 @@ describe('Claude API', () => {
     expect(calls).toEqual([['idnes.cz', 'sport.cz'], ['sport.cz']]);
     expect(logs.join(' ')).toContain('idnes.cz');
     expect(blockedDomains(new Error(`400 {"message":"The following domains are not accessible to our user agent: ['a.cz', 'b.com']."}`))).toEqual(['a.cz', 'b.com']);
+  });
+
+  it('došlý kredit je srozumitelná chyba, spotřeba tokenů jde do logu', async () => {
+    const credit = () => new Response(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.' } }), { status: 400, headers: { 'content-type': 'application/json' } });
+    const f = vi.fn(async () => credit()) as unknown as typeof fetch;
+    await expect(askClaude({ fetch: f, apiKey: 'k', model: 'm' }, 's', 'u')).rejects.toThrow('Došel kredit Claude API');
+    await expect(askWithSearch({ fetch: f, apiKey: 'k', model: 'm' }, { system: 's', user: 'u', domains: ['sport.cz'] })).rejects.toThrow('Došel kredit Claude API');
+    expect(apiError(new Error('boom')).message).toBe('boom');
+
+    const { f: ok } = fakeApi([message([{ type: 'text', text: '{}' }], 'end_turn', { input_tokens: 12345, output_tokens: 678, server_tool_use: { web_search_requests: 0, web_fetch_requests: 0 } })]);
+    const logs: string[] = [];
+    await askClaude({ fetch: ok, apiKey: 'k', model: 'm' }, 's', 'u', (l) => logs.push(l));
+    expect(logs[0]).toContain('Tokeny: vstup 12 tis., výstup 678.');
   });
 
   it('domény a porovnání adres', () => {

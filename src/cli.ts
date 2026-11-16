@@ -35,7 +35,7 @@ import { checkKotelVenca, fallbackKotelVenca, kotelCaption, kotelDisclaimer, kot
 import { findScorers, type Source } from './scorers.ts';
 import { seasonFor, syncRounds, tsdbGetter } from './sportsdb.ts';
 import { LEAGUES, type LeagueId } from './leagues.ts';
-import { checkDigestVenca, digestCaption, digestDisclaimer, digestUserMessage, findDigest, isActive, period, type DigestConfig } from './digest.ts';
+import { checkDigestVenca, digestCaption, digestDisclaimer, digestUserMessage, fallbackDigestVenca, findDigest, isActive, period, type DigestConfig } from './digest.ts';
 import { digestHtml, MAX_ROWS } from './render/digest.ts';
 import {
   checkSpecialVenca, fallbackSpecialVenca, findInvite, findResult, pickEvent, specialCaption, specialDisclaimer, specialId, specialUserMessage,
@@ -62,6 +62,30 @@ function output(key: string, value: string): void {
 
 export function pragueToday(at = new Date()): string {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Prague' }).format(at);
+}
+
+/**
+ * Texty Vency přes Claude API. Když API selže (došlý kredit, výpadek), vrátí null a důvod zapíše
+ * do `pozor`: koncept pak vyjde se suchými texty z dat a čeká na člověka, místo aby úloha spadla.
+ */
+async function askVenca(io: ClaudeIo, user: string, pozor: string[]): Promise<unknown> {
+  const system = readFileSync(join(ROOT, 'prompts/system.md'), 'utf8');
+  let text: string;
+  try {
+    text = await askClaude(io, system, user, console.log);
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    console.log(`Texty Vency bez AI: ${why}`);
+    pozor.push(`Texty jsou bez AI (suché), Claude API selhalo: ${why}`);
+    return null;
+  }
+  try {
+    return parseJsonLoose(text);
+  } catch (e) {
+    console.log(`Venca vrátil nečitelnou odpověď: ${e instanceof Error ? e.message : String(e)}`);
+    console.log(`Začátek odpovědi: ${JSON.stringify(text.slice(0, 600))}`);
+    return {};
+  }
 }
 
 const readDraft = (id: string): Draft => JSON.parse(readFileSync(join(OUT, `${id}.json`), 'utf8')) as Draft;
@@ -95,18 +119,16 @@ async function make(): Promise<void> {
     venca = fallbackVenca(night);
   } else {
     model = process.env.VENCA_MODEL || DEFAULT_MODEL;
-    const system = readFileSync(join(ROOT, 'prompts/system.md'), 'utf8');
-    const text = await askClaude({ fetch, apiKey, model }, system, userMessage(night, date), console.log);
-    let raw: unknown;
-    try {
-      raw = parseJsonLoose(text);
-    } catch (e) {
-      raw = {};
-      console.log(`Venca vrátil nečitelnou odpověď: ${e instanceof Error ? e.message : String(e)}`);
-      console.log(`Začátek odpovědi: ${JSON.stringify(text.slice(0, 600))}`);
+    const failed: string[] = [];
+    const raw = await askVenca({ fetch, apiKey, model }, userMessage(night, date), failed);
+    if (raw === null) {
+      venca = fallbackVenca(night);
+      model = null;
+    } else {
+      venca = checkVenca(raw, night, date);
+      if ((raw as { prazdne?: boolean }).prazdne) venca.pozor.push('Venca tvrdí, že nikdo nehrál, ale data říkají něco jiného.');
     }
-    venca = checkVenca(raw, night, date);
-    if ((raw as { prazdne?: boolean }).prazdne) venca.pozor.push('Venca tvrdí, že nikdo nehrál, ale data říkají něco jiného.');
+    venca.pozor.push(...failed);
   }
 
   const facts = postFacts(night.players, venca.muz_noci ?? undefined);
@@ -339,21 +361,8 @@ async function liga(leagueId: LeagueId): Promise<void> {
   }
 
   const facts: KotelFacts = { round: view.round, dayLabel: view.dayLabel, games, table: tableAsOf(rounds.values(), view.date, teams, league.points) };
-  let venca: KotelVencaOut;
-  if (io) {
-    const system = readFileSync(join(ROOT, 'prompts/system.md'), 'utf8');
-    const text = await askClaude(io, system, kotelUserMessage(facts, view.date, league), console.log);
-    let raw: unknown = {};
-    try {
-      raw = parseJsonLoose(text);
-    } catch (e) {
-      console.log(`Venca vrátil nečitelnou odpověď: ${e instanceof Error ? e.message : String(e)}`);
-      console.log(`Začátek odpovědi: ${JSON.stringify(text.slice(0, 600))}`);
-    }
-    venca = checkKotelVenca(raw, facts, view.date);
-  } else {
-    venca = fallbackKotelVenca(facts, league);
-  }
+  const raw = io ? await askVenca(io, kotelUserMessage(facts, view.date, league), pozor) : null;
+  const venca: KotelVencaOut = raw === null ? fallbackKotelVenca(facts, league) : checkKotelVenca(raw, facts, view.date);
   if (venca.muz_kola) facts.hero = venca.muz_kola;
 
   const draft: Draft = {
@@ -440,20 +449,8 @@ async function special(): Promise<void> {
     pozor.push(...r.pozor);
   }
 
-  let venca: SpecialVencaOut;
-  if (io) {
-    const system = readFileSync(join(ROOT, 'prompts/system.md'), 'utf8');
-    const text = await askClaude(io, system, specialUserMessage(facts), console.log);
-    let raw: unknown = {};
-    try {
-      raw = parseJsonLoose(text);
-    } catch (err) {
-      console.log(`Venca vrátil nečitelnou odpověď: ${err instanceof Error ? err.message : String(err)}`);
-    }
-    venca = checkSpecialVenca(raw, facts, e.hashtagy);
-  } else {
-    venca = fallbackSpecialVenca(facts, e.hashtagy);
-  }
+  const raw = io ? await askVenca(io, specialUserMessage(facts), pozor) : null;
+  const venca: SpecialVencaOut = raw === null ? fallbackSpecialVenca(facts, e.hashtagy) : checkSpecialVenca(raw, facts, e.hashtagy);
 
   const draft: Draft = {
     id, kind: 'special', stage, date: e.datum, dayLabel: dayLabel(e.datum), caption: specialCaption(venca, facts.sources),
@@ -512,6 +509,12 @@ async function prehled(): Promise<void> {
   const facts = found.facts;
   for (const it of facts.items) console.log(`  ${it.date} ${it.player} (${it.team || it.competition}) – ${it.opponent} ${it.score}${it.goals !== null ? ` ${it.goals}+${it.assists ?? 0}` : ''}`);
   for (const x of found.pozor) console.log(`  ⚠ ${x}`);
+  if (found.errors.length) {
+    // Bez obou hledání se nic potvrdit nedá; hlásí se jako chyba, ne jako „nic se nenašlo“.
+    const why = [...new Set(found.errors.map((x) => x.replace(/^hledání ve zdrojích [AB] selhalo: /, '')))].join(' ');
+    output('error', why);
+    throw new Error(`${cfg.nazev}: hledání selhalo. ${why}`);
+  }
   if (!facts.rows.length) {
     const single = found.pozor.find((x) => /jen v jednom zdroji/.test(x)) ?? '';
     console.log(`${cfg.nazev} ${facts.periodLabel}: žádný ověřený výkon, příspěvek nebude.`);
@@ -521,19 +524,13 @@ async function prehled(): Promise<void> {
     return;
   }
 
-  const system = readFileSync(join(ROOT, 'prompts/system.md'), 'utf8');
-  const text = await askClaude(io, system, digestUserMessage(facts), console.log);
-  let raw: unknown = {};
-  try {
-    raw = parseJsonLoose(text);
-  } catch (err) {
-    console.log(`Venca vrátil nečitelnou odpověď: ${err instanceof Error ? err.message : String(err)}`);
-  }
-  const venca = checkDigestVenca(raw, facts, cfg.hashtagy);
+  const failed: string[] = [];
+  const raw = await askVenca(io, digestUserMessage(facts), failed);
+  const venca = raw === null ? fallbackDigestVenca(facts, cfg.hashtagy) : checkDigestVenca(raw, facts, cfg.hashtagy);
   if (venca.hrdina) facts.hero = venca.hrdina;
   const draft: Draft = {
     id: draftKey, kind: 'prehled', digest: cfg.id, date: p.to, dayLabel: facts.periodLabel,
-    caption: digestCaption(venca, facts, MAX_ROWS), venca, facts, pozor: [...found.pozor, ...venca.pozor],
+    caption: digestCaption(venca, facts, MAX_ROWS), venca, facts, pozor: [...found.pozor, ...failed, ...venca.pozor],
     model, createdAt: new Date().toISOString(),
   };
   const html = digestHtml({ facts, venca, disclaimer: digestDisclaimer(facts.sources) });
