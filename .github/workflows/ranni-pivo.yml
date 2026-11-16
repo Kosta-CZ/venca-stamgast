@@ -26,8 +26,9 @@ permissions:
   contents: read
   issues: write
 
+# Fronta má nové jméno: ve staré „ranni-pivo“ uvízly 16. 11. na GitHubu dva běhy, které nejdou zrušit.
 concurrency:
-  group: ranni-pivo
+  group: ranni-pivo-rano
   cancel-in-progress: false
 
 jobs:
