@@ -1,20 +1,26 @@
-# Kontrola zdrojů dat: co vrací API-Sports (tajemství API_SPORTS_KEY) pro extraligu, Chance Ligu
-# a reprezentace. Jen ruční spuštění. Vypisuje sportovní data a tarif, nikdy klíč ani údaje o účtu.
+# Kontrola zdrojů dat pro extraligu, Chance Ligu a reprezentace. Jen ruční spuštění.
+# API-Sports (tajemství API_SPORTS_KEY): vypisuje sportovní data a tarif, nikdy klíč ani údaje o účtu.
+# TheSportsDB: volný zdroj s veřejným klíčem, bez registrace.
 
 name: Zdroje dat (kontrola)
 
 on:
   workflow_dispatch:
     inputs:
+      source:
+        description: 'Který zdroj zkusit'
+        type: choice
+        options: [thesportsdb, api-sports, oba]
+        default: thesportsdb
       season:
-        description: 'Sezóna (prázdné = aktuální; tarif Free má jen starší sezóny)'
+        description: 'API-Sports: sezóna (prázdné = aktuální; tarif Free má jen starší sezóny)'
         required: false
 
 permissions:
   contents: read
 
 jobs:
-  api-sports:
+  sources:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -24,7 +30,12 @@ jobs:
         with:
           node-version: 22
 
+      - name: TheSportsDB
+        if: inputs.source != 'api-sports'
+        run: node scripts/sources-free.mjs
+
       - name: API-Sports
+        if: inputs.source != 'thesportsdb'
         env:
           API_SPORTS_KEY: ${{ secrets.API_SPORTS_KEY }}
           SEASON: ${{ inputs.season }}
