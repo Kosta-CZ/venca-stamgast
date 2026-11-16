@@ -59,7 +59,14 @@ jobs:
         if: steps.ready.outputs.go == 'true'
         working-directory: worker
         run: |
-          npx --yes wrangler@4.163.0 deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          # U úplně nového Workeru Cloudflare občas hned po nahrání tvrdí, že neexistuje: zkusí se to znovu.
+          for attempt in 1 2 3; do
+            if npx --yes wrangler@4.163.0 deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log"; then
+              grep -qE 'https://venca-bot\.' "$RUNNER_TEMP/deploy.log" && break
+            fi
+            echo "Pokus $attempt nevyšel, zkouším znovu za 15 s."
+            sleep 15
+          done
           url="$(grep -oE 'https://venca-bot\.[a-zA-Z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1)"
           if [ -z "$url" ]; then
             echo "::error::Nepodařilo se zjistit adresu Workeru z výstupu wrangleru."
@@ -89,7 +96,10 @@ jobs:
             --data-urlencode 'allowed_updates=["message","callback_query"]' \
             -o "$RUNNER_TEMP/hook.json"
           node -e 'const r=require(process.argv[1]); console.log("Telegram:", r.description || ""); process.exit(r.ok ? 0 : 1)' "$RUNNER_TEMP/hook.json"
-          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "text=🍺 Venca je připojený. Každé ráno ti sem pošlu Ranní pivo ke schválení." \
-            -o /dev/null || true
+          # Pozdrav jen při ručním spuštění, ne po každé změně kódu bota.
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+              --data-urlencode "text=🍺 Venca je připojený. Každé ráno ti sem pošlu Ranní pivo ke schválení." \
+              -o /dev/null || true
+          fi
