@@ -17,7 +17,10 @@ komentáře česky.
    z TheSportsDB (`src/sportsdb.ts`, kola uložená v R2), střelci přes Claude API s vyhledáváním v českých zdrojích
    (`src/scorers.ts`, `src/claude.ts`), tabulka a kolo (`src/kotel.ts`), texty Vency (`src/kotelVenca.ts`), šablona
    `src/render/kotel.ts`. Schvaluje a vydává se stejně jako Ranní pivo.
-4. Nastavení (secrets, R2, token) je v `docs/nastaveni.md`.
+4. `.github/workflows/specialy.yml` dělá speciál k velké akci Čecha podle `data/specialy/*.json`: odpoledne pozvánku,
+   po zápase výsledek (`src/special.ts`, šablona `src/render/special.ts`). Fakta ze dvou nezávislých hledání
+   (mezinárodní a české zdroje), kód je porovná údaj po údaji. Obě verze se schvalují v Telegramu.
+5. Nastavení (secrets, R2, token) je v `docs/nastaveni.md`.
 
 ## Pravidla (povinná)
 
@@ -78,11 +81,18 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
 - Claude API se volá přes oficiální SDK (`@anthropic-ai/sdk`, verze API 2026-10-21, klíč jde jako Bearer)
   se záložním modelem při odmítnutí (server-side fallback).
 
+### Speciály k velkým akcím
+
+- Hotovo pro Procházku – Stirlinga (UFC Fight Night, Dauhá, sobota 21. 11. 2026, hlavní karta 19:00 našeho času):
+  pozvánka 13:23, výsledek 23:23, záloha 0:53. Bible má sekci 8 o MMA (bez posměchu knockoutům a zraněním, respekt
+  k soupeři, MMA jen u velkých zápasů Čechů); kód navíc hlídá rizikové výrazy (`MMA_TABOO`) a u výsledku nepustí výraz vztek.
+- Fakta: dvě hledání (`zdroje_a` mezinárodní, `zdroje_b` české), každý údaj musí sedět v obou, odkazy musí být
+  z povolených webů a z výsledků hledání. Časy převádí kód (`toPrague`), ne AI.
+- Další akce = nový JSON v `data/specialy/` a řádky `cron` ve `specialy.yml`. Zkouška celé cesty na minulém zápase:
+  `zkouska-2026-04-11-ufc327` (ručně, bez odeslání).
+
 ### Plán dál (dohodnuto s majitelem 16. 11. 2026)
 
-- Speciál k zápasu Jiřího Procházky (UFC, sobota 21. 11. večer, Dauhá, soupeř Navajo Stirling): odpoledne pozvánka,
-  po zápase výsledek, který musí sedět ve dvou zdrojích. Do bible: MMA bez posměchu knockoutům a zraněním, k soupeři
-  respekt; MMA jen u velkých zápasů Čechů.
 - Potom hokejoví legionáři (Švédsko, Finsko, Německo, Švýcarsko, Rakousko, AHL; **KHL nikdy**), tenis do Australian
   Open (každý výsledek ze dvou zdrojů, do bible přibude tenis) a fotbal v cizině.
 - Výsledky z víkendu vycházejí hned (v neděli večer nebo v pondělí ráno). Do týdne se rozkládají jen příspěvky

@@ -28,6 +28,13 @@ export interface ReportGame {
   note: string;
 }
 
+const SOURCE_NAMES: [string, string][] = [
+  ['ceskenoviny.cz', 'ČTK'], ['ceskatelevize.cz', 'ČT sport'], ['isport.blesk.cz', 'iSport'], ['idnes.cz', 'iDNES'],
+  ['irozhlas.cz', 'iROZHLAS'], ['aktualne.cz', 'Aktuálně'], ['denik.cz', 'Deník'], ['sport.cz', 'Sport.cz'],
+  ['ufc.com', 'UFC'], ['espn.com', 'ESPN'], ['cbssports.com', 'CBS Sports'], ['mmafighting.com', 'MMA Fighting'],
+  ['mmajunkie.usatoday.com', 'MMA Junkie'], ['sherdog.com', 'Sherdog'], ['tapology.com', 'Tapology'],
+];
+
 /** Krátký název zdroje do popisku: ceskenoviny.cz je ČTK, sport.ceskatelevize.cz je ČT sport. */
 export function sourceLabel(url: string): string {
   let host = '';
@@ -36,9 +43,7 @@ export function sourceLabel(url: string): string {
   } catch {
     return url;
   }
-  if (host.endsWith('ceskenoviny.cz')) return 'ČTK';
-  if (host.endsWith('ceskatelevize.cz')) return 'ČT sport';
-  return host;
+  return SOURCE_NAMES.find(([d]) => host === d || host.endsWith(`.${d}`))?.[1] ?? host;
 }
 
 const gameName = (g: Pick<KotelGame, 'home' | 'away'>) => `${g.home} – ${g.away}`;
@@ -63,7 +68,7 @@ Pro každý zápas uveď:
 - "strelci_domaci" a "strelci_hoste": hráči, kteří dali gól, s počtem gólů. Jméno piš jako ČTK v řádku „Branky“: příjmení, iniciála křestního jména jen tam, kde ji zdroj uvádí (např. "L. Hudáček"). Gól z rozhodujících nájezdů do střelců nepatří.
 - "rozhodujici_najezd": u zápasu rozhodnutého nájezdy hráč, který proměnil rozhodující nájezd, jinak null,
 - "zdroje": adresy článků, ze kterých jsi střelce vzal (jen stránky, které jsi opravdu našel nebo otevřel),
-- "poznamka": prázdná, nebo krátce, co je sporné (například že se zdroje liší).
+- "poznamka": prázdná, nebo krátce, když je střelec nebo počet gólů nejistý (zdroje se liší, údaj chybí). Překlepy ve zdroji, které na střelce nemají vliv, nepiš.
 
 Když zápas ve zdrojích nenajdeš, nech seznamy střelců prázdné a do "poznamka" napiš proč. Nehádej.
 

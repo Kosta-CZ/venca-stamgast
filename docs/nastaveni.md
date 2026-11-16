@@ -97,6 +97,20 @@ Nic nového se nenastavuje: Kotel používá stejné klíče jako Ranní pivo (C
 - **Názvy týmů:** `data/extraliga-tymy.json`. Neznámý tým (třeba nováček) se ukáže ke kontrole, stačí ho připsat.
 - **Schválení a vydání:** stejně jako Ranní pivo (✅ Vydat / 🗑 Zahodit). Kotel nikdy nevychází sám.
 
+## 7. Speciál k velké akci (Procházka v UFC a další)
+
+Taky bez nového nastavení. Akce se popisuje souborem v `data/specialy/` (kdo, proti komu, kdy, pásmo místa
+a dvě skupiny zdrojů) a v `.github/workflows/specialy.yml` dostane řádky `cron`.
+
+- **Procházka – Stirling, sobota 21. 11. 2026** (hlavní karta v 19:00 našeho času): pozvánka v 13:23,
+  výsledek ve 23:23 a záloha v 0:53. Když výsledek ještě nesedí ve dvou zdrojích, přijde zpráva a zkusí se to znovu.
+- **Fakta:** Claude API hledá dvakrát nezávisle, jednou jen v mezinárodních zdrojích (UFC, ESPN…) a jednou jen
+  v českých (iSport, ČTK, ČT sport…). Kód obě verze porovná; každý údaj musí sedět v obou, jinak je „Ke kontrole“.
+  Časy převádí na náš čas kód.
+- **Ručně:** Actions → **Speciál (velké akce)** → Run workflow: druh (pozvánka / výsledek), případně název souboru akce.
+  Zkouška na minulém zápase: akce `zkouska-2026-04-11-ufc327`, odeslání vypnuté (nic se nenahraje ani nepošle).
+- **Schválení:** obě verze chodí do Telegramu s tlačítky ✅ Vydat / 🗑 Zahodit, nikdy nevychází samy.
+
 ## Token
 
 - **Token Facebooku (začíná `EAA`, Unified login):** nevyprší, ranní úloha jen ověří, že platí.

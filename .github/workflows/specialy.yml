@@ -1,0 +1,158 @@
+# Speciál k velké akci Čecha (popis akce v data/specialy/*.json). Odpoledne pozvánka, po zápase výsledek;
+# obojí jde ke schválení do Telegramu (✅ Vydat / 🗑 Zahodit, vydává vydat.yml), nikdy nevychází samo.
+# Fakta dohledá Claude API dvěma nezávislými hledáními (mezinárodní a české zdroje); každý údaj musí sedět
+# v obou, jinak jde do „Ke kontrole“. Výsledek se vyrobí, až ho oba zdroje mají.
+#
+# Plán (UTC): běh před 17:00 našeho času dělá pozvánku, pozdější výsledek. Nová akce = nový JSON
+# v data/specialy a nové řádky cron sem. Ručně: Run workflow (druh, případně název souboru akce).
+
+name: Speciál (velké akce)
+
+on:
+  schedule:
+    # Procházka v UFC, sobota 21. 11. 2026: hlavní karta v 19:00 našeho času, hlavní zápas zhruba od 21:30.
+    - cron: '23 12 21 11 *'   # pozvánka 13:23
+    - cron: '23 22 21 11 *'   # výsledek 23:23 (rezerva po konci zápasu)
+    - cron: '53 23 21 11 *'   # záloha výsledku 0:53 (už neděle)
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Co vyrobit'
+        type: choice
+        options: [pozvanka, vysledek]
+        default: pozvanka
+      event:
+        description: 'Název souboru akce v data/specialy bez .json (prázdné = akce na dnešek)'
+        required: false
+      ai:
+        description: 'Fakta a texty přes Claude API'
+        type: boolean
+        default: true
+      send:
+        description: 'Poslat ke schválení (Telegram, jinak issue)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: specialy
+  cancel-in-progress: false
+
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalace
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Co vyrobit
+        id: what
+        env:
+          INPUT_STAGE: ${{ inputs.stage }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            hour="$(TZ=Europe/Prague date +%-H)"
+            if [ "$hour" -lt 17 ] && [ "$hour" -ge 6 ]; then stage=pozvanka; else stage=vysledek; fi
+          else
+            stage="$INPUT_STAGE"
+          fi
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
+          # Poslední plánovaný běh výsledku (záloha) to po neúspěchu vzdá a řekne si o ruční spuštění.
+          [ "$SCHEDULE" = '53 23 21 11 *' ] && echo "last=true" >> "$GITHUB_OUTPUT"
+          echo "Druh: $stage"
+
+      - name: Výroba speciálu
+        id: make
+        env:
+          ANTHROPIC_API_KEY: ${{ (github.event_name == 'schedule' || inputs.ai) && secrets.ANTHROPIC_API_KEY || '' }}
+          VENCA_MODEL: ${{ vars.VENCA_MODEL }}
+          STAGE: ${{ steps.what.outputs.stage }}
+          EVENT: ${{ inputs.event }}
+          SCHEDULED: ${{ github.event_name == 'schedule' }}
+        run: |
+          args=(--stage "$STAGE")
+          [ -n "$EVENT" ] && args+=(--event "$EVENT")
+          [ "$SCHEDULED" = true ] && args+=(--skip-existing)
+          npm run -s venca -- special "${args[@]}"
+
+      - name: Koncept k nahlédnutí
+        if: steps.make.outputs.has_post == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: special-${{ steps.what.outputs.stage }}
+          retention-days: 14
+          path: |
+            out/*.jpg
+            out/*.html
+            out/*.json
+
+      - name: Nahrání do úložiště
+        id: upload
+        # Zkušební běh bez odeslání nic nenahrává: koncept zůstane jen v artefaktu běhu.
+        if: steps.make.outputs.has_post == 'true' && vars.R2_PUBLIC_URL != '' && (github.event_name == 'schedule' || inputs.send)
+        run: npm run -s venca -- upload --id "${{ steps.make.outputs.id }}"
+
+      - name: Ke schválení (Telegram / issue)
+        if: steps.make.outputs.has_post == 'true' && (github.event_name == 'schedule' || inputs.send)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ID: ${{ steps.make.outputs.id }}
+          UPLOADED: ${{ steps.upload.outputs.image_url != '' }}
+        run: |
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && [ "$UPLOADED" = true ]; then
+            npm run -s venca -- telegram --id "$ID"
+            exit 0
+          fi
+          title="$(npm run -s venca -- issue --id "$ID" --title)"
+          if gh issue list --state open --limit 100 --json title --jq '.[].title' | grep -Fxq "$title"; then
+            echo "Issue „$title“ už je otevřené."
+            exit 0
+          fi
+          gh label create ke-schvaleni --color F5B027 --description 'Koncept čeká na /vydat' 2>/dev/null || true
+          npm run -s venca -- issue --id "$ID" > "$RUNNER_TEMP/body.md"
+          gh issue create --title "$title" --label ke-schvaleni --body-file "$RUNNER_TEMP/body.md" --assignee "${{ github.repository_owner }}"
+
+      - name: Výsledek zatím není
+        if: steps.make.outputs.reason == 'waiting' && (github.event_name == 'schedule' || inputs.send)
+        env:
+          WHY: ${{ steps.make.outputs.why }}
+          LAST: ${{ steps.what.outputs.last }}
+        run: |
+          if [ "$LAST" = true ]; then
+            next="Ani teď ho nemám, spusť prosím úlohu Speciál ručně (výsledek), až bude venku."
+          else
+            next="Zkusím to znovu za hodinu a půl, nebo spusť úlohu Speciál ručně (výsledek)."
+          fi
+          npm run -s venca -- notify --text "🥊 Výsledek zápasu zatím není potvrzený ve dvou zdrojích ($WHY). $next"
+
+      - name: Hlášení chyby do Telegramu
+        if: failure()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -d node_modules ] || npm ci
+          npm run -s venca -- notify --text "❌ Speciál se nepovedlo vyrobit. Podrobnosti: $RUN_URL" || true

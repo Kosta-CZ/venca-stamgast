@@ -7,6 +7,8 @@ jedním komentářem.
 - **Ranní pivo:** Češi v NHL přes noc (data z veřejného API NHL).
 - **Extraligový kotel:** v sobotu ráno poslední kolo extraligy, střelci a špička tabulky (výsledky z TheSportsDB,
   střelci ze zpráv ČTK a dalších českých zdrojů, kontrolované proti skóre).
+- **Speciály k velkým akcím Čechů** (první: Jiří Procházka v UFC): odpoledne pozvánka, po zápase výsledek;
+  každý údaj ověřený ve dvou nezávislých zdrojích.
 - Grafika 1080 × 1350, Venca v osmi výrazech podle výsledku.
 - Čísla do grafiky dosazuje kód, ne AI. Co v textu nesedí s daty, se ukáže ke kontrole.
 

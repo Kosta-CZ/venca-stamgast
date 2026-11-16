@@ -5,6 +5,7 @@ import type { PostFacts } from './facts.ts';
 import type { KotelFacts } from './kotel.ts';
 import type { KotelVencaOut } from './kotelVenca.ts';
 import type { Source } from './scorers.ts';
+import { STAGE_LABEL, type SpecialFacts, type SpecialVencaOut, type Stage } from './special.ts';
 import type { VencaOut } from './venca.ts';
 
 interface DraftBase {
@@ -35,10 +36,17 @@ export interface KotelDraft extends DraftBase {
   sources: Source[];
 }
 
-export type Draft = RanniPivoDraft | KotelDraft;
+export interface SpecialDraft extends DraftBase {
+  kind: 'special';
+  stage: Stage;
+  venca: SpecialVencaOut;
+  facts: SpecialFacts;
+}
+
+export type Draft = RanniPivoDraft | KotelDraft | SpecialDraft;
 export type DraftKind = Draft['kind'];
 
-export const KIND_LABEL: Record<DraftKind, string> = { 'ranni-pivo': 'Ranní pivo', kotel: 'Extraligový kotel' };
+export const KIND_LABEL: Record<DraftKind, string> = { 'ranni-pivo': 'Ranní pivo', kotel: 'Extraligový kotel', special: 'Speciál' };
 
 /** Id konceptu: den a druh, např. 2026-11-17-ranni-pivo nebo 2026-11-15-kotel (den kola). */
 export const draftId = (date: string, kind: DraftKind): string => `${date}-${kind}`;
@@ -51,9 +59,11 @@ export function draftIdFromIssue(body: string): string | null {
   return m?.[1] ?? null;
 }
 
-/** Název konceptu do zpráv: „Ranní pivo pondělí 9. 11.“, „Extraligový kotel 19. kolo“. */
+/** Název konceptu do zpráv: „Ranní pivo pondělí 9. 11.“, „Extraligový kotel 19. kolo“, „Speciál UFC: pozvánka“. */
 export function draftTitle(d: Draft): string {
-  return d.kind === 'kotel' ? `${KIND_LABEL.kotel} ${d.facts.round}. kolo` : `${KIND_LABEL[d.kind]} ${d.dayLabel}`;
+  if (d.kind === 'kotel') return `${KIND_LABEL.kotel} ${d.facts.round}. kolo`;
+  if (d.kind === 'special') return `${KIND_LABEL.special} ${d.facts.stitek}: ${STAGE_LABEL[d.stage]}`;
+  return `${KIND_LABEL[d.kind]} ${d.dayLabel}`;
 }
 
 export function issueTitle(d: Draft): string {
@@ -66,7 +76,9 @@ export function issueBody(d: Draft): string {
   const quoted = d.caption.split('\n').map((l) => `> ${l}`).join('\n');
   const sources = d.kind === 'kotel' && d.sources.length
     ? `\n\n**Zdroje střelců**\n\n${d.sources.map((s) => `- ${s.url} (${s.games.join(', ')})`).join('\n')}`
-    : '';
+    : d.kind === 'special' && d.facts.sources.length
+      ? `\n\n**Zdroje (dvě nezávislá hledání)**\n\n${d.facts.sources.map((u) => `- ${u}`).join('\n')}`
+      : '';
   return `${DRAFT_MARK(d.id)}
 ${d.imageUrl ? `![${draftTitle(d)}](${d.imageUrl})` : '_(obrázek se nenahrál, je v artefaktu běhu)_'}
 

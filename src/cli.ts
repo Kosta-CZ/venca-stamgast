@@ -3,6 +3,8 @@
 //   make     [--date YYYY-MM-DD] [--demo] [--no-ai]   vyrobí koncept Ranního piva do out/
 //   kotel    [--round N] [--date YYYY-MM-DD] [--no-ai] [--early] [--skip-existing] [--demo]
 //                                                       vyrobí koncept Extraligového kotle (poslední odehrané kolo)
+//   special  --stage pozvanka|vysledek [--event SOUBOR] [--date YYYY-MM-DD] [--no-ai] [--skip-existing]
+//                                                       speciál k velké akci z data/specialy (fakta ze dvou zdrojů)
 //   upload   --id ID                                    nahraje koncept do R2 (obrázek + JSON)
 //   issue    --id ID [--title]                          vypíše tělo (nebo název) issue ke schválení
 //   telegram --id ID                                    pošle koncept ke schválení do Telegramu
@@ -13,7 +15,7 @@
 //
 // Výstupy pro GitHub Actions jdou do $GITHUB_OUTPUT. Tajné klíče se nikdy nevypisují.
 
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { postFacts } from './facts.ts';
 import { fetchNight, nhlDateFor, type CzPlayer, type Night } from './nhl.ts';
@@ -28,6 +30,11 @@ import { kotelHtml } from './render/kotel.ts';
 import { checkKotelVenca, fallbackKotelVenca, kotelCaption, kotelDisclaimer, kotelUserMessage, type KotelVencaOut } from './kotelVenca.ts';
 import { findScorers, type Source } from './scorers.ts';
 import { seasonFor, syncRounds, tsdbGetter } from './sportsdb.ts';
+import {
+  checkSpecialVenca, fallbackSpecialVenca, findInvite, findResult, pickEvent, specialCaption, specialDisclaimer, specialId, specialUserMessage,
+  type SpecialEvent, type SpecialFacts, type SpecialVencaOut, type Stage,
+} from './special.ts';
+import { specialHtml } from './render/special.ts';
 import { checkImage, publishImage, prepareContainer, refreshToken } from './instagram.ts';
 import { dirStore, putObject, r2FromEnv, r2Store, type Store } from './storage.ts';
 import { sendApproval, sendNote, tgEscape, tgFromEnv } from './telegram.ts';
@@ -344,6 +351,7 @@ async function kotel(): Promise<void> {
   for (const g of games) console.log(`  ${g.home} – ${g.away} ${scoreText(g) || (g.postponedTo ? `odloženo na ${g.postponedTo}` : 'bez výsledku')}  ${scorersText(g.homeScorers)} | ${scorersText(g.awayScorers)}${g.shootoutWinner ? ` | sn ${g.shootoutWinner}` : ''}`);
   console.log(`Tabulka: ${facts.table.map((r) => `${r.pos}. ${r.team} ${r.points} (${r.games})`).join(', ')}`);
   for (const s of sources) console.log(`  zdroj ${s.url}: ${s.games.join(', ')}`);
+  console.log(`Titulek: ${venca.titulek}\nHláška: ${venca.hlaska}\nPopisek: ${venca.popisek}`);
   console.log(`Koncept ${id}: muž kola ${facts.hero ? `${facts.hero.name} (${facts.hero.team})` : '–'}, výraz ${venca.vyraz}, ke kontrole ${draft.pozor.length}.`);
   for (const p of draft.pozor) console.log(`  ⚠ ${p}`);
   output('has_post', 'true');
@@ -351,7 +359,105 @@ async function kotel(): Promise<void> {
   output('pozor', String(draft.pozor.length));
 }
 
-const commands: Record<string, () => Promise<void> | void> = { make, kotel, upload, issue, telegram, notify, publish, refresh };
+function loadEvents(): { file: string; event: SpecialEvent }[] {
+  const dir = join(ROOT, 'data/specialy');
+  return readdirSync(dir).filter((f) => f.endsWith('.json')).sort().map((f) => ({ file: f.replace(/\.json$/, ''), event: JSON.parse(readFileSync(join(dir, f), 'utf8')) as SpecialEvent }));
+}
+
+// Speciál k velké akci (data/specialy/*.json): pozvánka odpoledne, výsledek po zápase. Fakta ze dvou
+// nezávislých hledání (A mezinárodní, B české zdroje), každý údaj musí sedět v obou.
+async function special(): Promise<void> {
+  mkdirSync(OUT, { recursive: true });
+  const stage = arg('stage') as Stage;
+  if (stage !== 'pozvanka' && stage !== 'vysledek') throw new Error('--stage musí být pozvanka nebo vysledek.');
+  const today = arg('date') ?? pragueToday();
+  const events = loadEvents();
+  const wanted = arg('event');
+  const e = wanted ? events.find((x) => x.file === wanted)?.event : pickEvent(events.map((x) => x.event), stage, today);
+  if (!e) {
+    if (wanted) throw new Error(`Akce ${wanted} v data/specialy není.`);
+    console.log('Dnes žádná velká akce není.');
+    output('has_post', 'false');
+    return;
+  }
+  const id = specialId(e, stage);
+  const store = roundStore();
+  if (flag('skip-existing') && (await store.get(`drafts/${id}.json`))) {
+    console.log(`Koncept ${id} už existuje, nic nevyrábím.`);
+    output('has_post', 'false');
+    output('reason', 'exists');
+    return;
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const model = process.env.VENCA_MODEL || DEFAULT_MODEL;
+  const io: ClaudeIo | null = apiKey && !flag('no-ai') ? { fetch, apiKey, model } : null;
+  const pozor: string[] = [];
+  let facts: SpecialFacts;
+
+  if (stage === 'pozvanka') {
+    if (io) {
+      const r = await findInvite(io, e, console.log);
+      facts = r.facts;
+      pozor.push(...r.pozor);
+    } else {
+      facts = { stage, akce: e.akce, sport: e.sport, stitek: e.stitek, datum: e.datum, dayLabel: dayLabel(e.datum), czech: { name: e.cech, record: null }, opponent: { name: e.souper, record: null }, rows: [{ label: 'Akce', value: e.akce }], sources: [] };
+      pozor.push('Fakta chybí: bez klíče ANTHROPIC_API_KEY se nehledají.');
+    }
+  } else {
+    if (!io) throw new Error('Výsledek bez Claude API dohledat nejde (chybí ANTHROPIC_API_KEY).');
+    // Bilance z pozvánky (pokud vyšla), ať je výsledek ve stejné podobě.
+    const inviteText = (await store.get(`drafts/${specialId(e, 'pozvanka')}.json`).catch(() => null)) ?? (existsSync(join(OUT, `${specialId(e, 'pozvanka')}.json`)) ? readFileSync(join(OUT, `${specialId(e, 'pozvanka')}.json`), 'utf8') : null);
+    const invite = inviteText ? (JSON.parse(inviteText) as { facts?: SpecialFacts }).facts : undefined;
+    const r = await findResult(io, e, invite, console.log);
+    if ('waiting' in r) {
+      console.log(`Výsledek zatím není potvrzený: ${r.waiting}`);
+      output('has_post', 'false');
+      output('reason', 'waiting');
+      output('why', r.waiting.replace(/\n/g, ' '));
+      return;
+    }
+    facts = r.facts;
+    pozor.push(...r.pozor);
+  }
+
+  let venca: SpecialVencaOut;
+  if (io) {
+    const system = readFileSync(join(ROOT, 'prompts/system.md'), 'utf8');
+    const text = await askClaude(io, system, specialUserMessage(facts), console.log);
+    let raw: unknown = {};
+    try {
+      raw = parseJsonLoose(text);
+    } catch (err) {
+      console.log(`Venca vrátil nečitelnou odpověď: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    venca = checkSpecialVenca(raw, facts, e.hashtagy);
+  } else {
+    venca = fallbackSpecialVenca(facts, e.hashtagy);
+  }
+
+  const draft: Draft = {
+    id, kind: 'special', stage, date: e.datum, dayLabel: dayLabel(e.datum), caption: specialCaption(venca, facts.sources),
+    venca, facts, pozor: [...pozor, ...venca.pozor], model: io ? model : null, createdAt: new Date().toISOString(),
+  };
+  const html = specialHtml({ facts, venca, disclaimer: specialDisclaimer(facts.sources) });
+  writeFileSync(join(OUT, `${id}.html`), html);
+  const { htmlToJpeg } = await import('./render/shot.ts');
+  await htmlToJpeg(html, SIZE, join(OUT, `${id}.jpg`));
+  writeDraft(draft);
+
+  console.log(`${facts.czech.name} (${facts.czech.record ?? '?'}) – ${facts.opponent.name} (${facts.opponent.record ?? '?'})${facts.winner !== undefined ? `, vítěz ${facts.winner ?? '–'}` : ''}`);
+  for (const r of facts.rows) console.log(`  ${r.label}: ${r.value}`);
+  for (const u of facts.sources) console.log(`  zdroj ${u}`);
+  console.log(`Titulek: ${venca.titulek}\nHláška: ${venca.hlaska}\nPopisek: ${venca.popisek}`);
+  console.log(`Koncept ${id}: výraz ${venca.vyraz}, ke kontrole ${draft.pozor.length}.`);
+  for (const p of draft.pozor) console.log(`  ⚠ ${p}`);
+  output('has_post', 'true');
+  output('id', id);
+  output('pozor', String(draft.pozor.length));
+}
+
+const commands: Record<string, () => Promise<void> | void> = { make, kotel, special, upload, issue, telegram, notify, publish, refresh };
 
 const cmd = process.argv[2] ?? '';
 const run = commands[cmd];

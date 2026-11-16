@@ -49,11 +49,16 @@ export function approvalHeader(d: Draft): string {
     const hero = d.venca.muz_kola ? `muž kola: ${d.venca.muz_kola.name} (${d.venca.muz_kola.team})` : 'bez muže kola';
     return `🏒 <b>Extraligový kotel · ${d.facts.round}. kolo</b>\n<i>${tgEscape(d.dayLabel)} · ${tgEscape(hero)} · výraz ${tgEscape(d.venca.vyraz)}</i>`;
   }
+  if (d.kind === 'special') {
+    const f = d.facts;
+    const what = d.stage === 'pozvanka' ? 'pozvánka' : `výsledek${f.winner ? `: vítěz ${f.winner}` : ''}`;
+    return `🥊 <b>Speciál ${tgEscape(f.stitek)} · ${tgEscape(what)}</b>\n<i>${tgEscape(f.czech.name)} – ${tgEscape(f.opponent.name)} · ${tgEscape(d.dayLabel)} · výraz ${tgEscape(d.venca.vyraz)}</i>`;
+  }
   return `🍺 <b>Ranní pivo · ${tgEscape(d.dayLabel)}</b>\n<i>Muž noci: ${tgEscape(d.facts.hero.jmeno)} · výraz ${tgEscape(d.venca.vyraz)}</i>`;
 }
 
-/** Zdroje střelců Kotle: odkaz a zápasy, které z něj jsou. */
-export function sourcesText(sources: readonly { url: string; games: string[] }[]): string {
+/** Zdroje (střelci Kotle, fakta speciálu): odkaz a u Kotle zápasy, které z něj jsou. */
+export function sourcesText(sources: readonly { url: string; games: string[] }[], title = 'Zdroje střelců'): string {
   if (!sources.length) return '';
   const short = (url: string) => {
     try {
@@ -64,7 +69,7 @@ export function sourcesText(sources: readonly { url: string; games: string[] }[]
       return url;
     }
   };
-  return `📰 <b>Zdroje střelců</b>\n${sources.map((s) => `• <a href="${tgAttr(s.url)}">${tgEscape(short(s.url))}</a>: ${tgEscape(s.games.join(', '))}`).join('\n')}`;
+  return `📰 <b>${tgEscape(title)}</b>\n${sources.map((s) => `• <a href="${tgAttr(s.url)}">${tgEscape(short(s.url))}</a>${s.games.length ? `: ${tgEscape(s.games.join(', '))}` : ''}`).join('\n')}`;
 }
 
 /** Celý text ke schválení: hlavička, popisek na Instagram, zdroje (Kotel) a co zkontrolovat. */
@@ -72,7 +77,11 @@ export function approvalText(d: Draft): string {
   const check = d.pozor.length
     ? `⚠️ <b>Ke kontrole</b>\n${d.pozor.map((p) => `• ${tgEscape(p)}`).join('\n')}`
     : '✅ Kontrola čísel prošla.';
-  const sources = d.kind === 'kotel' ? sourcesText(d.sources) : '';
+  const sources = d.kind === 'kotel'
+    ? sourcesText(d.sources)
+    : d.kind === 'special'
+      ? sourcesText(d.facts.sources.map((url) => ({ url, games: [] })), 'Zdroje (dvě nezávislá hledání)')
+      : '';
   return [approvalHeader(d), tgEscape(d.caption), sources, check].filter(Boolean).join('\n\n');
 }
 

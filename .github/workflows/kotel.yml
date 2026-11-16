@@ -92,7 +92,8 @@ jobs:
 
       - name: Nahrání do úložiště
         id: upload
-        if: steps.make.outputs.has_post == 'true' && vars.R2_PUBLIC_URL != ''
+        # Zkušební běh bez odeslání nic nenahrává: koncept zůstane jen v artefaktu běhu.
+        if: steps.make.outputs.has_post == 'true' && vars.R2_PUBLIC_URL != '' && (github.event_name == 'schedule' || inputs.send)
         run: npm run -s venca -- upload --id "${{ steps.make.outputs.id }}"
 
       - name: Ke schválení (Telegram / issue)

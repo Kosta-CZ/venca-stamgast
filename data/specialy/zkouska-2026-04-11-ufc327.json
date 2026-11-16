@@ -1,0 +1,15 @@
+{
+  "_popis": "Zkouška na minulém zápase (UFC 327, 11. 4. 2026): ověří celou cestu speciálu bez čekání na sobotu. Plánovaná úloha ho nikdy nespustí (datum je pryč). Ručně: Actions → Speciál → Run workflow, akce zkouska-2026-04-11-ufc327, odeslání vypnuté.",
+  "id": "mma-zkouska",
+  "datum": "2026-04-11",
+  "sport": "MMA",
+  "stitek": "UFC",
+  "akce": "UFC 327",
+  "cech": "Jiří Procházka",
+  "souper": "Carlos Ulberg",
+  "zadani": "zápas o uvolněný titul UFC v polotěžké váze na turnaji UFC 327 v Miami 11. dubna 2026, Jiří Procházka (Česko) proti Carlosi Ulbergovi",
+  "pasmo": "America/New_York",
+  "zdroje_a": ["ufc.com", "espn.com", "cbssports.com", "mmafighting.com", "mmajunkie.usatoday.com", "sherdog.com"],
+  "zdroje_b": ["isport.blesk.cz", "sport.cz", "idnes.cz", "ceskenoviny.cz", "sport.ceskatelevize.cz", "irozhlas.cz", "aktualne.cz"],
+  "hashtagy": ["#UFC", "#Prochazka", "#MMA"]
+}
