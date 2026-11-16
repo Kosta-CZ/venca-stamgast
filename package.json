@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "aws4fetch": "^1.0.20",
     "playwright": "1.63.0"
   },

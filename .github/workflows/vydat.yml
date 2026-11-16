@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       id:
-        description: 'Id konceptu, např. 2026-11-17-ranni-pivo'
+        description: 'Id konceptu, např. 2026-11-17-ranni-pivo nebo 2026-11-15-kotel'
         required: true
       dry_run:
         description: 'Jen zkouška (Instagram obrázek přijme, ale nevydá)'

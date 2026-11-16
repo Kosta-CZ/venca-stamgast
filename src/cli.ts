@@ -1,6 +1,8 @@
 // Příkazy úlohy: npm run venca -- <příkaz> [volby]
 //
 //   make     [--date YYYY-MM-DD] [--demo] [--no-ai]   vyrobí koncept Ranního piva do out/
+//   kotel    [--round N] [--date YYYY-MM-DD] [--no-ai] [--early] [--skip-existing] [--demo]
+//                                                       vyrobí koncept Extraligového kotle (poslední odehrané kolo)
 //   upload   --id ID                                    nahraje koncept do R2 (obrázek + JSON)
 //   issue    --id ID [--title]                          vypíše tělo (nebo název) issue ke schválení
 //   telegram --id ID                                    pošle koncept ke schválení do Telegramu
@@ -15,15 +17,19 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path';
 import { postFacts } from './facts.ts';
 import { fetchNight, nhlDateFor, type CzPlayer, type Night } from './nhl.ts';
-import { askClaude, caption, checkVenca, dayLabel, DEFAULT_MODEL, fallbackVenca, parseJsonLoose, userMessage, type VencaOut } from './venca.ts';
+import { caption, checkVenca, dayLabel, fallbackVenca, parseJsonLoose, userMessage, type VencaOut } from './venca.ts';
+import { askClaude, DEFAULT_MODEL, type ClaudeIo } from './claude.ts';
 import { draftId, issueBody, issueTitle, type Draft } from './draft.ts';
 import { ranniPivoHtml, SIZE } from './render/ranniPivo.ts';
 import { SAMPLE_DATE, SAMPLE_NIGHT, SAMPLE_VENCA } from './sample.ts';
-import { checkScorers } from './kotel.ts';
+import { checkScorers, latestRound, roundView, scoreText, scorersText, tableAsOf, teamNamer, type KotelFacts, type TeamEntry } from './kotel.ts';
 import { SAMPLE_KOTEL, SAMPLE_KOTEL_VENCA } from './kotelSample.ts';
 import { kotelHtml } from './render/kotel.ts';
+import { checkKotelVenca, fallbackKotelVenca, kotelCaption, kotelDisclaimer, kotelUserMessage, type KotelVencaOut } from './kotelVenca.ts';
+import { findScorers, type Source } from './scorers.ts';
+import { seasonFor, syncRounds, tsdbGetter } from './sportsdb.ts';
 import { checkImage, publishImage, prepareContainer, refreshToken } from './instagram.ts';
-import { putObject, r2FromEnv } from './storage.ts';
+import { dirStore, putObject, r2FromEnv, r2Store, type Store } from './storage.ts';
 import { sendApproval, sendNote, tgEscape, tgFromEnv } from './telegram.ts';
 
 const ROOT = new URL('..', import.meta.url).pathname;
@@ -225,10 +231,7 @@ async function refresh(): Promise<void> {
   console.log(`Token ${r.changed ? 'je nový' : 'zůstává'}, platí ještě ${r.days ?? '∞'} dní.`);
 }
 
-// Extraligový kotel: zatím jen ukázka z 19. kola (--demo), napojení na data přijde.
-async function kotel(): Promise<void> {
-  if (!flag('demo')) throw new Error('Kotel zatím umí jen ukázku: npm run venca -- kotel --demo');
-  mkdirSync(OUT, { recursive: true });
+async function kotelDemo(): Promise<void> {
   const problems = SAMPLE_KOTEL.games.flatMap(checkScorers);
   if (problems.length) console.log(`Ke kontrole:\n${problems.join('\n')}`);
   const html = kotelHtml({ facts: SAMPLE_KOTEL, venca: SAMPLE_KOTEL_VENCA });
@@ -237,6 +240,115 @@ async function kotel(): Promise<void> {
   const { htmlToJpeg } = await import('./render/shot.ts');
   await htmlToJpeg(html, SIZE, join(OUT, `${id}.jpg`));
   console.log(`Ukázka Kotle: out/${id}.jpg`);
+}
+
+/** Úložiště kol: R2, když je nastavené, jinak místní složka out/kola. */
+function roundStore(): Store {
+  try {
+    return r2Store(r2FromEnv());
+  } catch {
+    console.log('R2 není nastavené: kola ukládám jen do out/kola.');
+    return dirStore(join(OUT, 'kola'));
+  }
+}
+
+// Extraligový kotel: kolo z TheSportsDB (kola uložená v R2), střelci přes Claude API s vyhledáváním
+// v českých zdrojích, texty Vency a grafika. Bez --round vezme poslední odehrané kolo.
+async function kotel(): Promise<void> {
+  mkdirSync(OUT, { recursive: true });
+  if (flag('demo')) return kotelDemo();
+
+  const today = arg('date') ?? pragueToday();
+  const season = arg('season') ?? seasonFor(today);
+  const want = arg('round') ? Number(arg('round')) : undefined;
+  if (want !== undefined && !(Number.isInteger(want) && want > 0)) throw new Error('--round musí být číslo kola.');
+  const teams = teamNamer((JSON.parse(readFileSync(join(ROOT, 'data/extraliga-tymy.json'), 'utf8')) as { tymy: TeamEntry[] }).tymy);
+  const store = roundStore();
+
+  const get = tsdbGetter({ fetch, log: console.log, gapMs: Number(process.env.TSDB_GAP_MS) || undefined });
+  const rounds = await syncRounds(get, store, season, { today, force: want ? [want] : [], log: console.log });
+  if (!rounds.size) throw new Error(`TheSportsDB nemá pro sezónu ${season} žádná kola.`);
+  const views = [...rounds.values()].map((r) => roundView(r, teams, today));
+  const view = want ? views.find((v) => v.round === want) : latestRound(views, today);
+  if (!view) {
+    if (want) throw new Error(`Kolo ${want} v datech sezóny ${season} není.`);
+    console.log('Zatím se neodehrálo žádné kolo: Kotel nebude.');
+    output('has_post', 'false');
+    return;
+  }
+  const id = draftId(view.date, 'kotel');
+  output('round', String(view.round));
+  console.log(`Kolo ${view.round} (${view.dayLabel}): zápasů ${view.games.length}, bez výsledku ${view.missing.length}.`);
+
+  if (flag('skip-existing') && (await store.get(`drafts/${id}.json`))) {
+    console.log(`Koncept ${id} už existuje (nové kolo zatím není), nic nevyrábím.`);
+    output('has_post', 'false');
+    output('reason', 'exists');
+    return;
+  }
+  if (view.missing.length && flag('early')) {
+    console.log(`V datech ještě chybí výsledky: ${view.missing.join(', ')}. Zkusí to záložní běh.`);
+    output('has_post', 'false');
+    output('reason', 'waiting');
+    return;
+  }
+
+  const pozor: string[] = [];
+  if (view.missing.length) pozor.push(`V datech chybí výsledek: ${view.missing.join(', ')}.`);
+  if (view.unknownTeams.length) pozor.push(`Neznámé týmy (doplň je do data/extraliga-tymy.json): ${view.unknownTeams.join(', ')}.`);
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const model = process.env.VENCA_MODEL || DEFAULT_MODEL;
+  const io: ClaudeIo | null = apiKey && !flag('no-ai') ? { fetch, apiKey, model } : null;
+
+  let games = view.games;
+  let sources: Source[] = [];
+  if (io) {
+    const found = await findScorers(io, { round: view.round, dayLabel: view.dayLabel, season, games }, teams, console.log);
+    games = found.games;
+    sources = found.sources;
+    pozor.push(...found.pozor);
+  } else {
+    pozor.push('Střelci chybí: bez klíče ANTHROPIC_API_KEY se nehledají.');
+  }
+
+  const facts: KotelFacts = { round: view.round, dayLabel: view.dayLabel, games, table: tableAsOf(rounds.values(), view.date, teams) };
+  let venca: KotelVencaOut;
+  if (io) {
+    const system = readFileSync(join(ROOT, 'prompts/system.md'), 'utf8');
+    const text = await askClaude(io, system, kotelUserMessage(facts, view.date), console.log);
+    let raw: unknown = {};
+    try {
+      raw = parseJsonLoose(text);
+    } catch (e) {
+      console.log(`Venca vrátil nečitelnou odpověď: ${e instanceof Error ? e.message : String(e)}`);
+      console.log(`Začátek odpovědi: ${JSON.stringify(text.slice(0, 600))}`);
+    }
+    venca = checkKotelVenca(raw, facts, view.date);
+  } else {
+    venca = fallbackKotelVenca(facts);
+  }
+  if (venca.muz_kola) facts.hero = venca.muz_kola;
+
+  const draft: Draft = {
+    id, kind: 'kotel', season, date: view.date, dayLabel: view.dayLabel,
+    caption: kotelCaption(venca, sources), venca, facts, sources, pozor: [...pozor, ...venca.pozor],
+    model: io ? model : null, createdAt: new Date().toISOString(),
+  };
+  const html = kotelHtml({ facts, venca, disclaimer: kotelDisclaimer(sources) });
+  writeFileSync(join(OUT, `${id}.html`), html);
+  const { htmlToJpeg } = await import('./render/shot.ts');
+  await htmlToJpeg(html, SIZE, join(OUT, `${id}.jpg`));
+  writeDraft(draft);
+
+  for (const g of games) console.log(`  ${g.home} – ${g.away} ${scoreText(g) || (g.postponedTo ? `odloženo na ${g.postponedTo}` : 'bez výsledku')}  ${scorersText(g.homeScorers)} | ${scorersText(g.awayScorers)}${g.shootoutWinner ? ` | sn ${g.shootoutWinner}` : ''}`);
+  console.log(`Tabulka: ${facts.table.map((r) => `${r.pos}. ${r.team} ${r.points} (${r.games})`).join(', ')}`);
+  for (const s of sources) console.log(`  zdroj ${s.url}: ${s.games.join(', ')}`);
+  console.log(`Koncept ${id}: muž kola ${facts.hero ? `${facts.hero.name} (${facts.hero.team})` : '–'}, výraz ${venca.vyraz}, ke kontrole ${draft.pozor.length}.`);
+  for (const p of draft.pozor) console.log(`  ⚠ ${p}`);
+  output('has_post', 'true');
+  output('id', id);
+  output('pozor', String(draft.pozor.length));
 }
 
 const commands: Record<string, () => Promise<void> | void> = { make, kotel, upload, issue, telegram, notify, publish, refresh };

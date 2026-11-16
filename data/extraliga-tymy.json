@@ -1,0 +1,19 @@
+{
+  "_popis": "Převod názvů týmů extraligy z TheSportsDB do češtiny (do grafiky a pro Vencu). Hledá se podle id týmu v TheSportsDB, pak podle názvu bez diakritiky (název i aliasy). Nový tým stačí připsat; neznámý tým koncept ohlásí v „pozor“.",
+  "tymy": [
+    { "id": "141159", "nazev": "Sparta", "aliasy": ["Sparta Prague", "Sparta Praha", "HC Sparta Praha"] },
+    { "id": "140826", "nazev": "Hradec Králové", "aliasy": ["Mountfield HK", "Mountfield Hradec Králové", "HK Hradec Králové", "Hradec"] },
+    { "id": "141162", "nazev": "Liberec", "aliasy": ["Bílí Tygři Liberec", "HC Bílí Tygři Liberec"] },
+    { "id": "140827", "nazev": "Litvínov", "aliasy": ["HC Verva Litvínov", "Verva Litvínov"] },
+    { "id": "141407", "nazev": "Kladno", "aliasy": ["Rytíři Kladno"] },
+    { "id": "141160", "nazev": "Třinec", "aliasy": ["Oceláři Třinec", "HC Oceláři Třinec"] },
+    { "id": "140877", "nazev": "Plzeň", "aliasy": ["HC Škoda Plzeň", "Škoda Plzeň"] },
+    { "id": "141161", "nazev": "Boleslav", "aliasy": ["Mladá Boleslav", "BK Mladá Boleslav", "Ml. Boleslav"] },
+    { "id": "141164", "nazev": "Budějovice", "aliasy": ["Motor České Budějovice", "České Budějovice", "HC Motor České Budějovice"] },
+    { "id": "140824", "nazev": "Pardubice", "aliasy": ["Dynamo Pardubice", "HC Dynamo Pardubice"] },
+    { "id": "140879", "nazev": "Vítkovice", "aliasy": ["HC Vítkovice Ridera", "Vítkovice Ridera"] },
+    { "id": "140878", "nazev": "Olomouc", "aliasy": ["HC Olomouc"] },
+    { "id": "140880", "nazev": "Kometa", "aliasy": ["Kometa Brno", "HC Kometa Brno", "Brno"] },
+    { "id": "140825", "nazev": "Karlovy Vary", "aliasy": ["Energie Karlovy Vary", "HC Energie Karlovy Vary", "Vary"] }
+  ]
+}

@@ -3,8 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { approvalKeyboard, approvalText, PHOTO_CAPTION_MAX, sendApproval, tgCall, tgEscape } from '../src/telegram.ts';
 import { postFacts } from '../src/facts.ts';
 import { caption } from '../src/venca.ts';
-import type { Draft } from '../src/draft.ts';
+import { draftIdFromIssue, issueBody, issueTitle, type Draft } from '../src/draft.ts';
 import { SAMPLE_DATE, SAMPLE_NIGHT, SAMPLE_VENCA } from '../src/sample.ts';
+import { SAMPLE_KOTEL } from '../src/kotelSample.ts';
 import worker, { dispatchPublish, handleUpdate, parseCallback, webhookSecret, type Env } from '../worker/src/index.ts';
 
 const facts = postFacts(SAMPLE_NIGHT.players, '1')!;
@@ -62,6 +63,23 @@ describe('Telegram: zpráva ke schválení', () => {
     expect(calls.map((c) => c.url.split('/').pop())).toEqual(['sendPhoto', 'sendMessage']);
     expect(calls[0]!.body.reply_markup).toBeUndefined();
     expect(calls[1]!.body.reply_markup).toBeTruthy();
+  });
+
+  it('Kotel: kolo, muž kola, zdroje střelců jako odkazy a co zkontrolovat', () => {
+    const kotel: Draft = {
+      id: '2026-11-15-kotel', kind: 'kotel', season: '2026-2027', date: '2026-11-15', dayLabel: 'neděle 15. 11.',
+      caption: 'Popisek', venca: { muz_kola: { name: 'Daňo', team: 'Třinec' }, titulek: 'T', hlaska: 'H', popisek: 'Popisek', hashtagy: [], vyraz: 'rikal', pozor: [] },
+      facts: SAMPLE_KOTEL, sources: [{ url: 'https://www.ceskenoviny.cz/zpravy/2700000?a=1&b="2"', games: ['Kladno – Třinec'] }],
+      pozor: ['Odkaz <x>'], model: null, createdAt: '', imageUrl: 'https://pub-x.r2.dev/drafts/k.jpg',
+    };
+    const t = approvalText(kotel);
+    expect(t).toContain('Extraligový kotel · 19. kolo');
+    expect(t).toContain('muž kola: Daňo (Třinec)');
+    expect(t).toContain('<a href="https://www.ceskenoviny.cz/zpravy/2700000?a=1&amp;b=&quot;2&quot;">ceskenoviny.cz/zpravy/2700000</a>: Kladno – Třinec');
+    expect(t).toContain('Odkaz &lt;x&gt;');
+    expect(issueTitle(kotel)).toBe('Ke schválení: Extraligový kotel 19. kolo');
+    expect(draftIdFromIssue(issueBody(kotel))).toBe('2026-11-15-kotel');
+    for (const b of approvalKeyboard(kotel.id).inline_keyboard[0]!) expect(parseCallback(b.callback_data)?.id).toBe('2026-11-15-kotel');
   });
 
   it('chyba Telegramu neprozradí token', async () => {

@@ -40,17 +40,40 @@ export function approvalKeyboard(id: string): { inline_keyboard: { text: string;
   return { inline_keyboard: [[{ text: '✅ Vydat', callback_data: `vydat:${id}` }, { text: '🗑 Zahodit', callback_data: `zahodit:${id}` }]] };
 }
 
-/** Hlavička zprávy: druh, den, muž noci a výraz. */
-export function approvalHeader(d: Pick<Draft, 'dayLabel' | 'facts' | 'venca'>): string {
+/** Hodnota atributu v HTML Telegramu (odkaz). */
+export const tgAttr = (text: string): string => tgEscape(text).replace(/"/g, '&quot;');
+
+/** Hlavička zprávy: druh, den nebo kolo, muž noci/kola a výraz. */
+export function approvalHeader(d: Draft): string {
+  if (d.kind === 'kotel') {
+    const hero = d.venca.muz_kola ? `muž kola: ${d.venca.muz_kola.name} (${d.venca.muz_kola.team})` : 'bez muže kola';
+    return `🏒 <b>Extraligový kotel · ${d.facts.round}. kolo</b>\n<i>${tgEscape(d.dayLabel)} · ${tgEscape(hero)} · výraz ${tgEscape(d.venca.vyraz)}</i>`;
+  }
   return `🍺 <b>Ranní pivo · ${tgEscape(d.dayLabel)}</b>\n<i>Muž noci: ${tgEscape(d.facts.hero.jmeno)} · výraz ${tgEscape(d.venca.vyraz)}</i>`;
 }
 
-/** Celý text ke schválení: hlavička, popisek na Instagram a co zkontrolovat. */
-export function approvalText(d: Pick<Draft, 'dayLabel' | 'facts' | 'venca' | 'caption' | 'pozor'>): string {
+/** Zdroje střelců Kotle: odkaz a zápasy, které z něj jsou. */
+export function sourcesText(sources: readonly { url: string; games: string[] }[]): string {
+  if (!sources.length) return '';
+  const short = (url: string) => {
+    try {
+      const u = new URL(url);
+      const path = u.pathname.length > 28 ? `${u.pathname.slice(0, 27)}…` : u.pathname;
+      return `${u.hostname.replace(/^www\./, '')}${path === '/' ? '' : path}`;
+    } catch {
+      return url;
+    }
+  };
+  return `📰 <b>Zdroje střelců</b>\n${sources.map((s) => `• <a href="${tgAttr(s.url)}">${tgEscape(short(s.url))}</a>: ${tgEscape(s.games.join(', '))}`).join('\n')}`;
+}
+
+/** Celý text ke schválení: hlavička, popisek na Instagram, zdroje (Kotel) a co zkontrolovat. */
+export function approvalText(d: Draft): string {
   const check = d.pozor.length
     ? `⚠️ <b>Ke kontrole</b>\n${d.pozor.map((p) => `• ${tgEscape(p)}`).join('\n')}`
     : '✅ Kontrola čísel prošla.';
-  return `${approvalHeader(d)}\n\n${tgEscape(d.caption)}\n\n${check}`;
+  const sources = d.kind === 'kotel' ? sourcesText(d.sources) : '';
+  return [approvalHeader(d), tgEscape(d.caption), sources, check].filter(Boolean).join('\n\n');
 }
 
 /**

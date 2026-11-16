@@ -17,34 +17,39 @@ export const KOTEL_DISCLAIMER = 'Fiktivní AI postava. Výsledky z TheSportsDB, 
 export interface KotelInput {
   facts: KotelFacts;
   venca: Pick<VencaOut, 'titulek' | 'hlaska' | 'vyraz'>;
+  /** Patička se zdroji (výchozí: ČTK). */
+  disclaimer?: string;
 }
 
-function scorers(list: readonly KotelScorer[], hero?: string): string {
+type Hero = KotelFacts['hero'];
+
+function scorers(list: readonly KotelScorer[], team: string, hero: Hero): string {
   return list
     .map((s) => {
       const text = esc(s.goals > 1 ? `${s.name} ${s.goals}` : s.name);
-      return hero && s.name === hero ? `<b style="color:${ACC}">${text}</b>` : text;
+      return hero && s.name === hero.name && team === hero.team ? `<b style="color:${ACC}">${text}</b>` : text;
     })
     .join(', ');
 }
 
-function gameRow(g: KotelGame, hero?: string): string {
+function gameRow(g: KotelGame, hero: Hero): string {
   const teams = `<span class="t">${esc(g.home)} – ${esc(g.away)}</span>`;
   if (!played(g)) {
-    const when = g.postponedTo ? `hraje se ${shortDate(g.postponedTo)}` : 'bez výsledku';
+    const when = g.postponedTo ? `hraje se ${shortDate(g.postponedTo)}` : g.postponed ? 'odloženo' : 'bez výsledku';
     return `<div class="g"><div class="r">${teams}<span class="p">${esc(when)}</span></div></div>`;
   }
   const suffix = SUFFIX[g.ending] ? `<small>${SUFFIX[g.ending]}</small>` : '';
-  const goals = [scorers(g.homeScorers, hero), scorers(g.awayScorers, hero)].filter(Boolean).join(' – ');
+  const goals = [scorers(g.homeScorers, g.home, hero), scorers(g.awayScorers, g.away, hero)].filter(Boolean).join(' – ');
   const so = g.ending === 'so' && g.shootoutWinner ? ` · rozhodl nájezd ${esc(g.shootoutWinner)}` : '';
+  const when = g.playedOn ? `${goals || so ? ' · ' : ''}hráno ${esc(shortDate(g.playedOn))}` : '';
   return `<div class="g">
   <div class="r">${teams}<span class="s">${g.homeGoals}:${g.awayGoals}${suffix}</span></div>
-  <div class="sc">${goals}${so}</div>
+  <div class="sc">${goals}${so}${when}</div>
 </div>`;
 }
 
-export function kotelHtml({ facts, venca }: KotelInput): string {
-  const hero = facts.hero?.name;
+export function kotelHtml({ facts, venca, disclaimer = KOTEL_DISCLAIMER }: KotelInput): string {
+  const hero = facts.hero;
   const tiles = facts.table.slice(0, 4).map((r) => `
 <div style="background:${CARD};border-radius:14px;padding:14px 18px;display:flex;flex-direction:column;gap:4px;min-width:0">
   <div style="${MONO}font-size:17px;color:${MUTED};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.pos}. ${esc(r.team.toUpperCase())}</div>
@@ -103,7 +108,7 @@ html,body{margin:0;background:${BG}}
       <div style="font-size:29px;font-weight:800;line-height:1.25">„${esc(venca.hlaska)}“</div>
     </div>
   </div>
-  <div style="${MONO}font-size:17px;color:${MUTED};text-align:right">${esc(KOTEL_DISCLAIMER)}</div>
+  <div style="${MONO}font-size:17px;color:${MUTED};text-align:right">${esc(disclaimer)}</div>
 </div>
 <script>
 // Pojistka: když se kolo nevejde (dlouhá jména, víc zápasů), písmo výsledků se po načtení zmenší.

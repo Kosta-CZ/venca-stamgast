@@ -82,6 +82,21 @@ Bez nastaveného bota chodí koncepty dál jako issue.
 Tlačítka poslechne jen ten, jehož ID je v `TELEGRAM_CHAT_ID`. Po ťuknutí tlačítka hned zmizí a vydání má
 pojistku (`published/<id>.json` v úložišti), takže dvojí ťuknutí nevydá příspěvek dvakrát.
 
+## 6. Extraligový kotel
+
+Nic nového se nenastavuje: Kotel používá stejné klíče jako Ranní pivo (Claude API, R2, Telegram).
+
+- **Kdy:** v sobotu v 6:41 UTC (7:41 v zimě). Když v datech ještě chybí páteční výsledky, zkusí to záložní běh
+  v 9:41 UTC. Když se od minulé soboty nehrálo nové kolo, přijde jen krátká zpráva.
+- **Ručně:** Actions → **Extraligový kotel** → Run workflow, volitelně číslo kola (prázdné = poslední odehrané).
+- **Data:** výsledky z TheSportsDB (zdarma, asi 10 dotazů za minutu). Kola se ukládají do R2
+  (`kotel/<sezóna>/kolo-NN.json`), první běh sezóny stáhne celý rozpis (asi 7 minut), další jen nová kola.
+  Tabulka se počítá z uložených výsledků (3-2-1-0, při rovnosti bodů vzájemné zápasy).
+- **Střelci:** dohledá je Claude API s vyhledáváním jen na ceskenoviny.cz, hokej.cz a sport.ceskatelevize.cz.
+  Kód je porovná se skóre z TheSportsDB; rozpory jdou do „Ke kontrole“ a odkazy na zdroje do zprávy v Telegramu.
+- **Názvy týmů:** `data/extraliga-tymy.json`. Neznámý tým (třeba nováček) se ukáže ke kontrole, stačí ho připsat.
+- **Schválení a vydání:** stejně jako Ranní pivo (✅ Vydat / 🗑 Zahodit). Kotel nikdy nevychází sám.
+
 ## Token
 
 - **Token Facebooku (začíná `EAA`, Unified login):** nevyprší, ranní úloha jen ověří, že platí.

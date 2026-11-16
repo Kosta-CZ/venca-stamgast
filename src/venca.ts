@@ -52,27 +52,8 @@ export function userMessage(night: Night, pragueDate: string): string {
   return `FORMÁT: ranni_pivo\nDATUM: ${pragueDate}\nDATA:\n${JSON.stringify(vencaData(night, pragueDate), null, 2)}`;
 }
 
-export interface ClaudeIo {
-  fetch: typeof fetch;
-  apiKey: string;
-  model: string;
-}
-
-export const DEFAULT_MODEL = 'claude-sonnet-5-5';
-
-/** Zavolá Claude API a vrátí text odpovědi. Klíč se nikdy nevypisuje. */
-export async function askClaude(io: ClaudeIo, system: string, user: string, log: (line: string) => void = () => {}): Promise<string> {
-  const res = await io.fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'x-api-key': io.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: io.model, max_tokens: 4000, system, messages: [{ role: 'user', content: user }] }),
-  });
-  const json = (await res.json().catch(() => null)) as { content?: { type: string; text?: string }[]; stop_reason?: string; error?: { message?: string } } | null;
-  if (!res.ok || !json) throw new Error(`Claude API odmítlo dotaz: ${json?.error?.message ?? `stav ${res.status}`}`);
-  const text = (json.content ?? []).filter((c) => c.type === 'text').map((c) => c.text ?? '').join('');
-  log(`Claude (${io.model}): konec ${json.stop_reason ?? '?'}, bloky ${(json.content ?? []).map((c) => c.type).join(', ') || 'žádné'}, ${text.length} znaků textu.`);
-  return text;
-}
+// Volání Claude API je v claude.ts (oficiální SDK).
+export { askClaude, DEFAULT_MODEL, type ClaudeIo } from './claude.ts';
 
 /** JSON z odpovědi, i když ho model obalí do ``` nebo přidá větu navíc. */
 export function parseJsonLoose(text: string): unknown {
@@ -84,8 +65,29 @@ export function parseJsonLoose(text: string): unknown {
   return JSON.parse(body.slice(start, end + 1));
 }
 
-const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
-const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+export const words = (s: string): number => s.trim().split(/\s+/).filter(Boolean).length;
+export const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+
+/** Hashtagy bez diakritiky a mezer, bez sázkových, nejvýš `max`. */
+export function cleanHashtags(v: unknown, max = LIMITS.hashtags): string[] {
+  return (Array.isArray(v) ? v : [])
+    .filter((h): h is string => typeof h === 'string')
+    .map((h) => h.trim().replace(/^#?/, '#').replace(/\s+/g, ''))
+    .filter((h) => /^#[\p{L}\p{N}_]+$/u.test(h) && !/tip|kurz|sazk|sázk|bet/i.test(h))
+    .slice(0, max);
+}
+
+/** Poznámky, které Venca sám vrátil v poli `pozor`. */
+export const vencaNotes = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => `Venca: ${x.trim()}`) : [];
+
+/** Výraz ze seznamu; neznámý se nahradí klidem a ohlásí. */
+export function checkExpression(v: unknown, pozor: string[]): Expression {
+  const vyraz = str(v) as Expression;
+  if (EXPRESSIONS.includes(vyraz)) return vyraz;
+  if (v !== undefined) pozor.push(`Neznámý výraz „${String(v)}“, použit klid.`);
+  return 'klid';
+}
 
 /**
  * Převezme výstup Vency a zkontroluje ho proti datům. Nikdy nevyhodí chybu kvůli obsahu: co nesedí,
@@ -93,7 +95,7 @@ const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
  */
 export function checkVenca(raw: unknown, night: Night, pragueDate: string): VencaOut {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  const pozor: string[] = Array.isArray(o.pozor) ? o.pozor.filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => `Venca: ${x.trim()}`) : [];
+  const pozor = vencaNotes(o.pozor);
 
   const ids = new Set(night.players.map((p) => p.id));
   let muz = str(o.muz_noci) || null;
@@ -102,11 +104,7 @@ export function checkVenca(raw: unknown, night: Night, pragueDate: string): Venc
     muz = null;
   }
 
-  let vyraz = str(o.vyraz) as Expression;
-  if (!EXPRESSIONS.includes(vyraz)) {
-    if (o.vyraz !== undefined) pozor.push(`Neznámý výraz „${String(o.vyraz)}“, použit klid.`);
-    vyraz = 'klid';
-  }
+  const vyraz = checkExpression(o.vyraz, pozor);
 
   const titulek = str(o.titulek);
   const hlaska = str(o.hlaska);
@@ -123,11 +121,7 @@ export function checkVenca(raw: unknown, night: Night, pragueDate: string): Venc
     if (bad.length) pozor.push(`Čísla v ${label} nejsou v datech: ${[...new Set(bad)].join(', ')}.`);
   }
 
-  const hashtagy = (Array.isArray(o.hashtagy) ? o.hashtagy : [])
-    .filter((h): h is string => typeof h === 'string')
-    .map((h) => h.trim().replace(/^#?/, '#').replace(/\s+/g, ''))
-    .filter((h) => /^#[\p{L}\p{N}_]+$/u.test(h) && !/tip|kurz|sazk|sázk|bet/i.test(h))
-    .slice(0, LIMITS.hashtags);
+  const hashtagy = cleanHashtags(o.hashtagy);
 
   if (night.unfinished.length) pozor.push(`Při výrobě nebyly dohrané zápasy: ${night.unfinished.join(', ')}. Mohli v nich hrát Češi.`);
   for (const p of night.players) if (p.note) pozor.push(`Rozpor v datech (${p.jmeno}): ${p.note}`);

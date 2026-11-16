@@ -13,7 +13,11 @@ komentáře česky.
    zachytí Worker `venca-bot` (`worker/`, nasazuje `.github/workflows/bot.yml`) a spustí
    `.github/workflows/vydat.yml`, které koncept vydá přes Instagram API (`src/instagram.ts`) a odpoví
    v Telegramu. Bez bota jde koncept jako issue „Ke schválení…“ (`src/draft.ts`) a vydává se komentářem `/vydat`.
-3. Nastavení (secrets, R2, token) je v `docs/nastaveni.md`.
+3. `.github/workflows/kotel.yml` v sobotu ráno vyrobí Extraligový kotel z posledního odehraného kola: výsledky
+   z TheSportsDB (`src/sportsdb.ts`, kola uložená v R2), střelci přes Claude API s vyhledáváním v českých zdrojích
+   (`src/scorers.ts`, `src/claude.ts`), tabulka a kolo (`src/kotel.ts`), texty Vency (`src/kotelVenca.ts`), šablona
+   `src/render/kotel.ts`. Schvaluje a vydává se stejně jako Ranní pivo.
+4. Nastavení (secrets, R2, token) je v `docs/nastaveni.md`.
 
 ## Pravidla (povinná)
 
@@ -59,16 +63,20 @@ jen placeně (Free má 2022–2024). Co který zdroj vrací, ukáže ruční úl
 `scripts/sources.mjs`).
 Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická stránka čtoucí koncepty z R2).
 
-### Extraligový kotel (rozpracovaný)
+### Extraligový kotel
 
-- Hotovo: tvary dat a kontroly (`src/kotel.ts`: skóre, střelci proti skóre, body 3-2-1-0, tabulka z výsledků),
-  šablona (`src/render/kotel.ts`) a ukázka z 19. kola podle ČTK (`src/kotelSample.ts`, `npm run venca -- kotel --demo`).
-- Další krok jsou data. Výsledky kola dodá TheSportsDB (pomalu kvůli 429; kola se ukládají do R2 a tabulka se počítá
-  z nich; názvy týmů převádí vlastní tabulka). Střelce dohledá Claude API s nástrojem web search (jen české zdroje:
-  ceskenoviny.cz, hokej.cz, sport.ceskatelevize.cz…) jako JSON s odkazy na zdroje. `checkScorers` je porovná se skóre,
-  rozpory jdou do `pozor` a odkazy do zprávy v Telegramu. Pravidlo 1 má tak jednu výjimku (majitel souhlasil): střelce
-  dodává AI ze zpráv, kód je ale vždy porovná s výsledkem.
-- Vychází v sobotu ráno (poslední kolo a tabulka) a schvaluje se v Telegramu jako Ranní pivo.
+- Vychází v sobotu ráno (poslední odehrané kolo a tabulka), schvaluje se v Telegramu jako Ranní pivo, nikdy sám.
+  Id konceptu je `<poslední den kola>-kotel`, např. `2026-11-15-kotel`.
+- Výsledky: TheSportsDB `eventsround` (limit asi 10 dotazů za minutu, pak 429 a 2 minuty pauza; dotazy jdou po 7 s).
+  Kola se ukládají do R2 `kotel/<sezóna>/kolo-NN.json` a znovu se stahují jen ta, kde mohl přibýt výsledek.
+  Předehrávky a dohrávky jsou běžné: tabulka se počítá ze všech dohraných zápasů do posledního dne kola
+  (3-2-1-0, při rovnosti bodů vzájemné zápasy). Tabulka po 19. kole sedí se zprávou ČTK (test s fixture).
+- Střelci: Claude API s web search a web fetch jen na ceskenoviny.cz, hokej.cz, sport.ceskatelevize.cz. Skóre do zadání
+  nejde, zdroj ho musí přinést sám; kód porovná skóre zdroje i součet gólů střelců s TheSportsDB a odkazy s tím, co
+  Claude ve vyhledávání opravdu viděl. Pravidlo 1 má tak jednu výjimku (majitel souhlasil): střelce dodává AI ze zpráv,
+  kód je ale vždy porovná s výsledkem.
+- Claude API se volá přes oficiální SDK (`@anthropic-ai/sdk`, verze API 2026-10-21, klíč jde jako Bearer)
+  se záložním modelem při odmítnutí (server-side fallback).
 
 ### Plán dál (dohodnuto s majitelem 16. 11. 2026)
 

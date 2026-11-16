@@ -1,0 +1,129 @@
+# Extraligový kotel: v sobotu ráno vyrobí příspěvek z posledního odehraného kola extraligy a pošle ho
+# ke schválení do Telegramu se stejnými tlačítky jako Ranní pivo (✅ Vydat / 🗑 Zahodit, vydává vydat.yml).
+# Bez bota přijde jako issue „Ke schválení…“ a vydává se komentářem /vydat. Kotel nikdy nevychází sám.
+#
+# Výsledky jsou z TheSportsDB (zdarma, pomalé dotazy kvůli limitu), kola se ukládají do R2 (kotel/<sezóna>/)
+# a tabulka se počítá z nich. Střelce dohledá Claude API s vyhledáváním v českých zdrojích; kód je porovná
+# se skóre a rozpory i odkazy na zdroje jdou do zprávy ke schválení.
+#
+# Ruční spuštění: Run workflow, volitelně číslo kola (prázdné = poslední odehrané).
+
+name: Extraligový kotel
+
+on:
+  schedule:
+    # Sobota 6:41 UTC (7:41 v zimě). Když v datech ještě chybí páteční výsledky, počká na zálohu.
+    - cron: '41 6 * * 6'
+    # Záloha 9:41 UTC: vyrobí koncept, pokud ho ranní běh nevyrobil (i s chybějícími výsledky, ty půjdou do „pozor“).
+    - cron: '41 9 * * 6'
+  workflow_dispatch:
+    inputs:
+      round:
+        description: 'Kolo (prázdné = poslední odehrané)'
+        required: false
+      ai:
+        description: 'Střelci a texty Vency přes Claude API'
+        type: boolean
+        default: true
+      send:
+        description: 'Poslat ke schválení (Telegram, jinak issue)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: kotel
+  cancel-in-progress: false
+
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalace
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Výroba Kotle
+        id: make
+        env:
+          ANTHROPIC_API_KEY: ${{ (github.event_name == 'schedule' || inputs.ai) && secrets.ANTHROPIC_API_KEY || '' }}
+          VENCA_MODEL: ${{ vars.VENCA_MODEL }}
+          ROUND: ${{ inputs.round }}
+          EARLY: ${{ github.event.schedule == '41 6 * * 6' }}
+          SCHEDULED: ${{ github.event_name == 'schedule' }}
+        run: |
+          args=()
+          [ -n "$ROUND" ] && args+=(--round "$ROUND")
+          [ "$SCHEDULED" = true ] && args+=(--skip-existing)
+          [ "$EARLY" = true ] && args+=(--early)
+          npm run -s venca -- kotel "${args[@]}"
+
+      - name: Koncept k nahlédnutí
+        if: steps.make.outputs.has_post == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kotel
+          retention-days: 14
+          path: |
+            out/*.jpg
+            out/*.html
+            out/*.json
+
+      - name: Nahrání do úložiště
+        id: upload
+        if: steps.make.outputs.has_post == 'true' && vars.R2_PUBLIC_URL != ''
+        run: npm run -s venca -- upload --id "${{ steps.make.outputs.id }}"
+
+      - name: Ke schválení (Telegram / issue)
+        if: steps.make.outputs.has_post == 'true' && (github.event_name == 'schedule' || inputs.send)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ID: ${{ steps.make.outputs.id }}
+          UPLOADED: ${{ steps.upload.outputs.image_url != '' }}
+        run: |
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && [ "$UPLOADED" = true ]; then
+            npm run -s venca -- telegram --id "$ID"
+            exit 0
+          fi
+          title="$(npm run -s venca -- issue --id "$ID" --title)"
+          if gh issue list --state open --limit 100 --json title --jq '.[].title' | grep -Fxq "$title"; then
+            echo "Issue „$title“ už je otevřené."
+            exit 0
+          fi
+          gh label create ke-schvaleni --color F5B027 --description 'Koncept čeká na /vydat' 2>/dev/null || true
+          npm run -s venca -- issue --id "$ID" > "$RUNNER_TEMP/body.md"
+          gh issue create --title "$title" --label ke-schvaleni --body-file "$RUNNER_TEMP/body.md" --assignee "${{ github.repository_owner }}"
+
+      - name: Tento týden bez nového kola
+        if: steps.make.outputs.reason == 'exists' && github.event.schedule == '41 6 * * 6'
+        run: npm run -s venca -- notify --text "Extraligový kotel: od minulé soboty se nehrálo žádné nové kolo (poslední je ${{ steps.make.outputs.round }}. kolo), dnes nic nepošlu. 🏒"
+
+      - name: Hlášení chyby do Telegramu
+        if: failure()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -d node_modules ] || npm ci
+          npm run -s venca -- notify --text "❌ Extraligový kotel se nepovedlo vyrobit. Podrobnosti: $RUN_URL" || true
