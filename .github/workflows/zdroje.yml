@@ -5,6 +5,10 @@ name: Zdroje dat (kontrola)
 
 on:
   workflow_dispatch:
+    inputs:
+      season:
+        description: 'Sezóna (prázdné = aktuální; tarif Free má jen starší sezóny)'
+        required: false
 
 permissions:
   contents: read
@@ -23,4 +27,5 @@ jobs:
       - name: API-Sports
         env:
           API_SPORTS_KEY: ${{ secrets.API_SPORTS_KEY }}
+          SEASON: ${{ inputs.season }}
         run: node scripts/sources.mjs

@@ -12,6 +12,8 @@ const HOST = {
   hockey: 'https://v1.hockey.api-sports.io',
   football: 'https://v3.football.api-sports.io',
 };
+// Sezóna navíc (proměnná SEASON): tarif Free má jen starší sezóny, aktuální vrací chybu „plan“.
+const SEASON = process.env.SEASON || '';
 const FINISHED = new Set(['FT', 'AOT', 'AP', 'AET', 'PEN']);
 const byTime = (t) => (a, b) => t(a) - t(b);
 
@@ -46,7 +48,8 @@ async function hockey() {
   }
   const ext = leagues.find((l) => l.name === 'Extraliga');
   if (!ext) return;
-  const cur = ext.seasons.find((s) => s.current) ?? ext.seasons.at(-1);
+  const cur = { ...(ext.seasons.find((s) => s.current) ?? ext.seasons.at(-1)) };
+  if (SEASON) cur.season = SEASON;
   console.log(`  Extraliga: id ${ext.id}, sezóna ${cur.season} (${cur.start} – ${cur.end}), pokrytí ${JSON.stringify(cur.coverage ?? {})}`);
 
   const games = (await get('hockey', `games?league=${ext.id}&season=${cur.season}`)) ?? [];
@@ -90,7 +93,7 @@ async function football() {
   }
   const liga = leagues.find((l) => l.league.name === 'Czech Liga') ?? leagues.find((l) => l.league.type === 'League');
   if (!liga) return;
-  const cur = liga.seasons.find((s) => s.current) ?? liga.seasons.at(-1);
+  const cur = liga.seasons.find((s) => String(s.year) === SEASON) ?? liga.seasons.find((s) => s.current) ?? liga.seasons.at(-1);
   console.log(`  ${liga.league.name}: id ${liga.league.id}, sezóna ${cur.year} (${cur.start} – ${cur.end}), pokrytí ${JSON.stringify(cur.coverage ?? {})}`);
 
   const fx = (await get('football', `fixtures?league=${liga.league.id}&season=${cur.year}`)) ?? [];
@@ -115,7 +118,7 @@ async function football() {
   for (const t of teams.slice(0, 8)) console.log(`  tým ${t.team.id} ${t.team.name}, národní ${t.team.national}`);
   const nat = teams.find((t) => t.team.national && /^Czech/.test(t.team.name) && !/U\d/.test(t.team.name));
   if (nat) {
-    const nf = (await get('football', `fixtures?team=${nat.team.id}&season=${new Date().getUTCFullYear()}`)) ?? [];
+    const nf = (await get('football', `fixtures?team=${nat.team.id}&season=${SEASON || new Date().getUTCFullYear()}`)) ?? [];
     for (const f of nf.sort(byTime((f) => f.fixture.timestamp)).slice(-6)) {
       console.log(`  repre ${f.fixture.date.slice(0, 10)} ${f.league.name}: ${f.teams.home.name} – ${f.teams.away.name} ${f.goals.home ?? '-'}:${f.goals.away ?? '-'} ${f.fixture.status.short}`);
     }
