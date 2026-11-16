@@ -1,5 +1,8 @@
-# Schválení konceptu: majitel napíše do issue „Ke schválení…“ komentář /vydat (vydá na Instagram)
-# nebo /zahodit (zavře bez vydání). Funguje i z mobilní aplikace GitHubu.
+# Vydání konceptu na Instagram. Spouští ho:
+#  - tlačítko ✅ Vydat v Telegramu (Worker venca-bot zavolá workflow_dispatch s tg_chat a tg_message,
+#    výsledek pak úloha ohlásí jako odpověď na tu zprávu),
+#  - komentář /vydat (nebo /zahodit) v issue „Ke schválení…“, i z mobilní aplikace GitHubu,
+#  - ruční spuštění (Run workflow).
 # Repozitář je veřejný: úloha poslechne jen majitele repozitáře, ničí jiný komentář ji nespustí.
 # Ruční spuštění (Run workflow) umí vydat koncept podle id, se zaškrtnutou zkouškou nic nevydá.
 
@@ -17,6 +20,12 @@ on:
         description: 'Jen zkouška (Instagram obrázek přijme, ale nevydá)'
         type: boolean
         default: true
+      tg_chat:
+        description: 'Telegram: chat, kam ohlásit výsledek (vyplňuje bot)'
+        required: false
+      tg_message:
+        description: 'Telegram: zpráva s konceptem, na kterou odpovědět (vyplňuje bot)'
+        required: false
 
 permissions:
   contents: read
@@ -84,16 +93,25 @@ jobs:
         env:
           ID: ${{ steps.what.outputs.id }}
           ACTION: ${{ steps.what.outputs.action }}
+          TG_CHAT: ${{ inputs.tg_chat }}
+          TG_MESSAGE: ${{ inputs.tg_message }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
           R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           npm ci
-          if [ "$ACTION" = zkouska ]; then
-            npm run -s venca -- publish --id "$ID" --dry-run
-          else
-            npm run -s venca -- publish --id "$ID"
-          fi
+          args=(--id "$ID")
+          [ "$ACTION" = zkouska ] && args+=(--dry-run)
+          [ -n "$TG_CHAT" ] && args+=(--tg-chat "$TG_CHAT")
+          [ -n "$TG_MESSAGE" ] && args+=(--tg-reply "$TG_MESSAGE")
+          npm run -s venca -- publish "${args[@]}"
 
       - name: Zápis do issue
         if: always() && github.event_name == 'issue_comment' && steps.what.outputs.action == 'vydat'

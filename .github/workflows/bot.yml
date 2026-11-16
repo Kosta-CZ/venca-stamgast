@@ -1,0 +1,95 @@
+# Nasazení Telegram bota Vency: Cloudflare Worker „venca-bot“ (worker/), jeho tajné údaje a webhook.
+# Běží po změně ve worker/ a ručně (Run workflow). Všechny klíče jsou jen v GitHubu (Secrets
+# a Variables), úloha je Workeru předá sama; v Cloudflare se nic nenastavuje ručně.
+#
+# Potřebuje: secrets CLOUDFLARE_API_TOKEN, TELEGRAM_BOT_TOKEN, BOT_GITHUB_TOKEN
+#            variables CLOUDFLARE_ACCOUNT_ID, TELEGRAM_CHAT_ID
+# Postup je v docs/nastaveni.md, část Telegram.
+
+name: Telegram bot (nasazení)
+
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**', '.github/workflows/bot.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bot
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID }}
+      BOT_GITHUB_TOKEN: ${{ secrets.BOT_GITHUB_TOKEN }}
+    steps:
+      - name: Je všechno nastavené?
+        id: ready
+        run: |
+          missing=""
+          for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID BOT_GITHUB_TOKEN; do
+            [ -n "${!v}" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning title=Bot není nastavený::Chybí:$missing (postup je v docs/nastaveni.md, část Telegram)."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.ready.outputs.go == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.ready.outputs.go == 'true'
+        with:
+          node-version: 22
+
+      - name: Nasazení Workeru
+        id: deploy
+        if: steps.ready.outputs.go == 'true'
+        working-directory: worker
+        run: |
+          npx --yes wrangler@4.163.0 deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          url="$(grep -oE 'https://venca-bot\.[a-zA-Z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1)"
+          if [ -z "$url" ]; then
+            echo "::error::Nepodařilo se zjistit adresu Workeru z výstupu wrangleru."
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Tajné údaje Workeru
+        if: steps.ready.outputs.go == 'true'
+        working-directory: worker
+        run: |
+          umask 077
+          node -e 'const e=process.env; process.stdout.write(JSON.stringify({TELEGRAM_BOT_TOKEN:e.TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID:e.TELEGRAM_CHAT_ID,BOT_GITHUB_TOKEN:e.BOT_GITHUB_TOKEN}))' > "$RUNNER_TEMP/secrets.json"
+          npx --yes wrangler@4.163.0 secret bulk "$RUNNER_TEMP/secrets.json"
+          rm -f "$RUNNER_TEMP/secrets.json"
+
+      # Tajemství webhooku je SHA-256 z tokenu bota: Worker si ho spočítá stejně (worker/src/index.ts).
+      - name: Webhook Telegramu
+        if: steps.ready.outputs.go == 'true'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          secret="$(printf 'venca-webhook:%s' "$TELEGRAM_BOT_TOKEN" | sha256sum | cut -d' ' -f1)"
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+            --data-urlencode "url=${URL}/telegram" \
+            --data-urlencode "secret_token=${secret}" \
+            --data-urlencode 'allowed_updates=["message","callback_query"]' \
+            -o "$RUNNER_TEMP/hook.json"
+          node -e 'const r=require(process.argv[1]); console.log("Telegram:", r.description || ""); process.exit(r.ok ? 0 : 1)' "$RUNNER_TEMP/hook.json"
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=🍺 Venca je připojený. Každé ráno ti sem pošlu Ranní pivo ke schválení." \
+            -o /dev/null || true

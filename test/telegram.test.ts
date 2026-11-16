@@ -1,0 +1,139 @@
+import { createHash } from 'node:crypto';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { approvalKeyboard, approvalText, PHOTO_CAPTION_MAX, sendApproval, tgCall, tgEscape } from '../src/telegram.ts';
+import { postFacts } from '../src/facts.ts';
+import { caption } from '../src/venca.ts';
+import type { Draft } from '../src/draft.ts';
+import { SAMPLE_DATE, SAMPLE_NIGHT, SAMPLE_VENCA } from '../src/sample.ts';
+import worker, { dispatchPublish, handleUpdate, parseCallback, webhookSecret, type Env } from '../worker/src/index.ts';
+
+const facts = postFacts(SAMPLE_NIGHT.players, '1')!;
+const draft: Draft = {
+  id: '2026-11-09-ranni-pivo', kind: 'ranni-pivo', date: SAMPLE_DATE, dayLabel: 'pondělí 9. 11.',
+  caption: caption(SAMPLE_VENCA), venca: SAMPLE_VENCA, facts, pozor: ['Rozpor <v> datech & tak'], model: null, createdAt: '',
+  imageUrl: 'https://pub-x.r2.dev/drafts/2026-11-09-ranni-pivo-abc.jpg',
+};
+
+/** Falešný fetch: zapisuje volání a vrací úspěch. */
+function fakeFetch(status = 200, body: unknown = { ok: true, result: {} }) {
+  const calls: { url: string; body: Record<string, unknown> }[] = [];
+  const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : {} });
+    return new Response(status === 204 ? null : JSON.stringify(body), { status });
+  });
+  return { f: f as unknown as typeof fetch, calls };
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('Telegram: zpráva ke schválení', () => {
+  it('escapuje HTML a ukáže, co zkontrolovat', () => {
+    const t = approvalText(draft);
+    expect(t).toContain('Ranní pivo · pondělí 9. 11.');
+    expect(t).toContain('Muž noci: Tomáš Hertl');
+    expect(t).toContain('Rozpor &lt;v&gt; datech &amp; tak');
+    expect(tgEscape('<b>')).toBe('&lt;b&gt;');
+  });
+
+  it('bez výhrad píše, že kontrola prošla', () => {
+    expect(approvalText({ ...draft, pozor: [] })).toContain('Kontrola čísel prošla');
+  });
+
+  it('data tlačítek se vejdou do limitu Telegramu a Worker jim rozumí', () => {
+    const kb = approvalKeyboard(draft.id).inline_keyboard[0]!;
+    for (const b of kb) {
+      expect(new TextEncoder().encode(b.callback_data).length).toBeLessThanOrEqual(64);
+      expect(parseCallback(b.callback_data)?.id).toBe(draft.id);
+    }
+  });
+
+  it('krátký text jde jako popisek fotky s tlačítky', async () => {
+    const { f, calls } = fakeFetch();
+    await sendApproval({ fetch: f, token: 'T0K' }, '42', draft);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toContain('/sendPhoto');
+    expect(calls[0]!.body.photo).toBe(draft.imageUrl);
+    expect(calls[0]!.body.reply_markup).toBeTruthy();
+  });
+
+  it('dlouhý text jde do druhé zprávy s tlačítky', async () => {
+    const { f, calls } = fakeFetch();
+    await sendApproval({ fetch: f, token: 'T0K' }, '42', { ...draft, caption: 'x'.repeat(PHOTO_CAPTION_MAX) });
+    expect(calls.map((c) => c.url.split('/').pop())).toEqual(['sendPhoto', 'sendMessage']);
+    expect(calls[0]!.body.reply_markup).toBeUndefined();
+    expect(calls[1]!.body.reply_markup).toBeTruthy();
+  });
+
+  it('chyba Telegramu neprozradí token', async () => {
+    const f = (async () => new Response(JSON.stringify({ ok: false, description: 'bad token SECRET123' }), { status: 401 })) as unknown as typeof fetch;
+    await expect(tgCall({ fetch: f, token: 'SECRET123' }, 'getMe', {})).rejects.toThrow(/\*\*\*/);
+  });
+});
+
+describe('Worker bota', () => {
+  const env: Env = { TELEGRAM_BOT_TOKEN: 'bot:TOKEN', TELEGRAM_CHAT_ID: '42', BOT_GITHUB_TOKEN: 'ghp_x', GITHUB_REPO: 'Kosta-CZ/venca-stamgast' };
+  const msg = { message_id: 7, chat: { id: 42 } };
+
+  it('tajemství webhooku je stejné jako v úloze bot.yml (sha256sum)', async () => {
+    const expected = createHash('sha256').update('venca-webhook:bot:TOKEN').digest('hex');
+    expect(await webhookSecret('bot:TOKEN')).toBe(expected);
+  });
+
+  it('cizí tlačítka a neplatná data odmítne', () => {
+    expect(parseCallback('vydat:2026-11-17-ranni-pivo')).toEqual({ action: 'vydat', id: '2026-11-17-ranni-pivo' });
+    expect(parseCallback('vydat:../../etc')).toBeNull();
+    expect(parseCallback('smazat:2026-11-17-ranni-pivo')).toBeNull();
+  });
+
+  it('bez správné hlavičky Telegramu nic neudělá', async () => {
+    const { f, calls } = fakeFetch();
+    vi.stubGlobal('fetch', f);
+    const res = await worker.fetch(new Request('https://venca-bot.x.workers.dev/telegram', { method: 'POST', body: '{}' }), env, { waitUntil: () => {} });
+    expect(res.status).toBe(403);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('cizí člověk tlačítkem nic nevydá', async () => {
+    const { f, calls } = fakeFetch();
+    vi.stubGlobal('fetch', f);
+    await handleUpdate({ callback_query: { id: 'q', from: { id: 999 }, data: 'vydat:2026-11-17-ranni-pivo', message: msg } }, env);
+    expect(calls.some((c) => c.url.includes('api.github.com'))).toBe(false);
+    expect(calls[0]!.url).toContain('answerCallbackQuery');
+  });
+
+  it('✅ Vydat od majitele: nejdřív zmizí tlačítka, pak se spustí vydání s odkazem na zprávu', async () => {
+    const { f, calls } = fakeFetch(204);
+    vi.stubGlobal('fetch', f);
+    await handleUpdate({ callback_query: { id: 'q', from: { id: 42 }, data: 'vydat:2026-11-17-ranni-pivo', message: msg } }, env);
+    const order = calls.map((c) => (c.url.includes('api.github.com') ? 'github' : c.url.split('/').pop()));
+    expect(order[0]).toBe('editMessageReplyMarkup');
+    expect(order).toContain('github');
+    const gh = calls.find((c) => c.url.includes('api.github.com'))!;
+    expect(gh.url).toContain('/repos/Kosta-CZ/venca-stamgast/actions/workflows/vydat.yml/dispatches');
+    expect(gh.body).toEqual({ ref: 'main', inputs: { id: '2026-11-17-ranni-pivo', dry_run: false, tg_chat: '42', tg_message: '7' } });
+  });
+
+  it('🗑 Zahodit od majitele nic nevydává', async () => {
+    const { f, calls } = fakeFetch();
+    vi.stubGlobal('fetch', f);
+    await handleUpdate({ callback_query: { id: 'q', from: { id: 42 }, data: 'zahodit:2026-11-17-ranni-pivo', message: msg } }, env);
+    expect(calls.some((c) => c.url.includes('api.github.com'))).toBe(false);
+    expect(calls.some((c) => (c.body.text as string | undefined)?.includes('Zahozeno'))).toBe(true);
+  });
+
+  it('když GitHub vydání odmítne, tlačítka se vrátí', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${String(url).split('/').pop()} ${init?.body ?? ''}`);
+      return new Response('{}', { status: String(url).includes('api.github.com') ? 401 : 200 });
+    }));
+    await handleUpdate({ callback_query: { id: 'q', from: { id: 42 }, data: 'vydat:2026-11-17-ranni-pivo', message: msg } }, env);
+    const restores = calls.filter((c) => c.startsWith('editMessageReplyMarkup') && c.includes('vydat:2026-11-17-ranni-pivo'));
+    expect(restores).toHaveLength(1);
+  });
+
+  it('dispatch vrací stav GitHubu', async () => {
+    vi.stubGlobal('fetch', fakeFetch(204).f);
+    expect(await dispatchPublish(env, '2026-11-17-ranni-pivo', 42, 7)).toEqual({ ok: true, status: 204 });
+  });
+});

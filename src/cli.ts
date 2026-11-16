@@ -3,7 +3,10 @@
 //   make     [--date YYYY-MM-DD] [--demo] [--no-ai]   vyrobí koncept Ranního piva do out/
 //   upload   --id ID                                    nahraje koncept do R2 (obrázek + JSON)
 //   issue    --id ID [--title]                          vypíše tělo (nebo název) issue ke schválení
-//   publish  --id ID [--dry-run]                        vydá koncept z R2 na Instagram
+//   telegram --id ID                                    pošle koncept ke schválení do Telegramu
+//   notify   --text TEXT                                krátká zpráva majiteli do Telegramu
+//   publish  --id ID [--dry-run] [--tg-chat C] [--tg-reply M]
+//                                                       vydá koncept z R2 na Instagram (a ohlásí to v Telegramu)
 //   refresh  --out SOUBOR                               prodlouží token Instagramu
 //
 // Výstupy pro GitHub Actions jdou do $GITHUB_OUTPUT. Tajné klíče se nikdy nevypisují.
@@ -18,6 +21,7 @@ import { ranniPivoHtml, SIZE } from './render/ranniPivo.ts';
 import { SAMPLE_DATE, SAMPLE_NIGHT, SAMPLE_VENCA } from './sample.ts';
 import { checkImage, publishImage, prepareContainer, refreshToken } from './instagram.ts';
 import { putObject, r2FromEnv } from './storage.ts';
+import { sendApproval, sendNote, tgEscape, tgFromEnv } from './telegram.ts';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const OUT = join(ROOT, 'out');
@@ -109,7 +113,8 @@ async function upload(): Promise<void> {
   if (!id) throw new Error('Chybí --id.');
   const cfg = r2FromEnv();
   const draft = readDraft(id);
-  draft.imageUrl = await putObject(cfg, `drafts/${id}.jpg`, readFileSync(join(OUT, `${id}.jpg`)), 'image/jpeg');
+  // Obrázek má pokaždé nové jméno: po opakované výrobě téhož dne nedostane Instagram ani Telegram starou kopii z mezipaměti.
+  draft.imageUrl = await putObject(cfg, `drafts/${id}-${Date.now().toString(36)}.jpg`, readFileSync(join(OUT, `${id}.jpg`)), 'image/jpeg');
   writeDraft(draft);
   await putObject(cfg, `drafts/${id}.json`, JSON.stringify(draft, null, 2), 'application/json');
   console.log(`Nahráno: ${draft.imageUrl}`);
@@ -123,6 +128,9 @@ function issue(): void {
   process.stdout.write(flag('title') ? issueTitle(d) : issueBody(d));
 }
 
+/** Veřejná adresa v úložišti s obejitím mezipaměti (r2.dev klíč objektu dotazem nemění). */
+const fresh = (url: string) => `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+
 async function publish(): Promise<void> {
   const id = arg('id');
   if (!id) throw new Error('Chybí --id.');
@@ -130,21 +138,77 @@ async function publish(): Promise<void> {
   if (!token) throw new Error('Chybí tajemství IG_ACCESS_TOKEN (postup je v docs/nastaveni.md).');
   const base = (process.env.R2_PUBLIC_URL ?? '').replace(/\/+$/, '');
   if (!base) throw new Error('Chybí R2_PUBLIC_URL.');
-  const res = await fetch(`${base}/drafts/${id}.json`, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`Koncept ${id} v úložišti není (stav ${res.status}).`);
-  const draft = (await res.json()) as Draft;
-  if (!draft.imageUrl) throw new Error('Koncept nemá nahraný obrázek.');
-  const io = { fetch, token, userId: process.env.IG_USER_ID || undefined };
-  await checkImage(io, draft.imageUrl);
-  const post = { url: draft.imageUrl, caption: draft.caption };
-  if (flag('dry-run')) {
-    await prepareContainer(io, post);
-    console.log('Zkouška: Instagram obrázek přijal a zpracoval, nic se nevydalo.');
+  const dry = flag('dry-run');
+  const tg = tgFromEnv();
+  const tgChat = arg('tg-chat') ?? '';
+  const tgReply = arg('tg-reply');
+  const tell = async (html: string, keyboardFor?: string) => {
+    if (!tg || !tgChat) return;
+    await sendNote({ fetch, token: tg.token }, tgChat, html, { replyTo: tgReply, keyboardFor }).catch((e: unknown) => console.log(`Telegram: ${e instanceof Error ? e.message : String(e)}`));
+  };
+
+  try {
+    // Pojistka proti dvojímu vydání (dvě ťuknutí, opakovaný komentář): značka published/<id>.json v úložišti.
+    if (!dry) {
+      const mark = await fetch(fresh(`${base}/published/${id}.json`)).catch(() => null);
+      if (mark?.ok) {
+        const done = (await mark.json().catch(() => ({}))) as { permalink?: string };
+        console.log(`Koncept ${id} už vyšel: ${done.permalink ?? ''}`);
+        output('permalink', done.permalink ?? '');
+        await tell(`ℹ️ Tenhle příspěvek už vyšel${done.permalink ? `: ${tgEscape(done.permalink)}` : '.'}`);
+        return;
+      }
+    }
+
+    const res = await fetch(fresh(`${base}/drafts/${id}.json`));
+    if (!res.ok) throw new Error(`Koncept ${id} v úložišti není (stav ${res.status}).`);
+    const draft = (await res.json()) as Draft;
+    if (!draft.imageUrl) throw new Error('Koncept nemá nahraný obrázek.');
+    const io = { fetch, token, userId: process.env.IG_USER_ID || undefined };
+    await checkImage(io, draft.imageUrl);
+    const post = { url: draft.imageUrl, caption: draft.caption };
+    if (dry) {
+      await prepareContainer(io, post);
+      console.log('Zkouška: Instagram obrázek přijal a zpracoval, nic se nevydalo.');
+      await tell('🧪 Zkouška prošla: Instagram obrázek přijal, nic se nevydalo.');
+      return;
+    }
+    const done = await publishImage(io, post);
+    const link = done.permalink ?? '';
+    console.log(`Vydáno: ${link || done.id}`);
+    output('permalink', link);
+    // Značka vydání: jen když je k úložišti klíč (v úloze vydat.yml je).
+    try {
+      await putObject(r2FromEnv(), `published/${id}.json`, JSON.stringify({ id, permalink: link, mediaId: done.id, at: new Date().toISOString() }), 'application/json');
+    } catch (e) {
+      console.log(`Značku vydání se nepodařilo uložit: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    await tell(tgReply ? `✅ Vydáno na Instagram${link ? `: ${tgEscape(link)}` : '.'}` : `✅ Vyšlo automaticky (${tgEscape(draft.dayLabel)})${link ? `: ${tgEscape(link)}` : '.'}`);
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    await tell(`❌ Vydání se nepovedlo: ${tgEscape(why)}\nKoncept čeká dál, můžeš to zkusit znovu.`, dry ? undefined : id);
+    throw e;
+  }
+}
+
+async function telegram(): Promise<void> {
+  const id = arg('id');
+  if (!id) throw new Error('Chybí --id.');
+  const tg = tgFromEnv();
+  if (!tg) throw new Error('Telegram není nastavený (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID).');
+  await sendApproval({ fetch, token: tg.token }, tg.chatId, readDraft(id));
+  console.log('Koncept je v Telegramu ke schválení.');
+}
+
+async function notify(): Promise<void> {
+  const text = arg('text');
+  if (!text) throw new Error('Chybí --text.');
+  const tg = tgFromEnv();
+  if (!tg) {
+    console.log('Telegram není nastavený, zpráva se neposílá.');
     return;
   }
-  const done = await publishImage(io, post);
-  console.log(`Vydáno: ${done.permalink ?? done.id}`);
-  output('permalink', done.permalink ?? '');
+  await sendNote({ fetch, token: tg.token }, tg.chatId, tgEscape(text));
 }
 
 async function refresh(): Promise<void> {
@@ -158,7 +222,7 @@ async function refresh(): Promise<void> {
   console.log(`Token ${r.changed ? 'je nový' : 'zůstává'}, platí ještě ${r.days ?? '∞'} dní.`);
 }
 
-const commands: Record<string, () => Promise<void> | void> = { make, upload, issue, publish, refresh };
+const commands: Record<string, () => Promise<void> | void> = { make, upload, issue, telegram, notify, publish, refresh };
 
 const cmd = process.argv[2] ?? '';
 const run = commands[cmd];

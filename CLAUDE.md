@@ -9,8 +9,10 @@ komentáře česky.
 1. `.github/workflows/ranni-pivo.yml` každé ráno stáhne noc z NHL (`src/nhl.ts`), spočítá fakta
    (`src/facts.ts`), nechá Vencu napsat texty přes Claude API (`src/venca.ts`, prompt `prompts/system.md`),
    vykreslí obrázek (`src/render/`) a nahraje koncept do Cloudflare R2 (`src/storage.ts`).
-2. Založí issue „Ke schválení…“ s náhledem (`src/draft.ts`). Majitel komentářem `/vydat` spustí
-   `.github/workflows/vydat.yml`, které koncept vydá přes Instagram API (`src/instagram.ts`).
+2. Pošle koncept ke schválení do Telegramu (`src/telegram.ts`) s tlačítky ✅ Vydat / 🗑 Zahodit. Ťuknutí
+   zachytí Worker `venca-bot` (`worker/`, nasazuje `.github/workflows/bot.yml`) a spustí
+   `.github/workflows/vydat.yml`, které koncept vydá přes Instagram API (`src/instagram.ts`) a odpoví
+   v Telegramu. Bez bota jde koncept jako issue „Ke schválení…“ (`src/draft.ts`) a vydává se komentářem `/vydat`.
 3. Nastavení (secrets, R2, token) je v `docs/nastaveni.md`.
 
 ## Pravidla (povinná)
@@ -25,7 +27,9 @@ komentáře česky.
 4. **Výrazy Vency** jsou v `src/render/avatar.ts` (stejná kresba jako charakterový list). Gesta rukou
    jen taková, která nejdou vyložit jako urážka.
 5. **Tajné údaje jen v GitHub Secrets.** Nikdy je nevypisovat; chyby od Instagramu token maskují.
-6. Repozitář je veřejný: úloha `vydat.yml` musí poslouchat jen majitele (`github.repository_owner`).
+6. Repozitář je veřejný: úloha `vydat.yml` poslouchá jen majitele (`github.repository_owner`), Worker jen
+   `TELEGRAM_CHAT_ID` a jen požadavky s tajnou hlavičkou webhooku (SHA-256 z tokenu bota). Vydání má
+   pojistku proti dvojímu vydání (`published/<id>.json` v R2).
 7. Nový Čech v NHL se připíše do `data/czech-nhl.json` (hledá se podle iniciály a příjmení bez diakritiky).
 8. Po změně kódu `npm test` a `npm run typecheck`.
 

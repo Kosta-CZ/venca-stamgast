@@ -1,0 +1,14 @@
+{
+  // Telegram bot Vency. Nasazuje ho úloha .github/workflows/bot.yml (wrangler deploy),
+  // tajné údaje (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, BOT_GITHUB_TOKEN) nahraje tamtéž.
+  "name": "venca-bot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "vars": {
+    "GITHUB_REPO": "Kosta-CZ/venca-stamgast"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

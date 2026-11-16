@@ -1,6 +1,7 @@
-# Ranní pivo: každé ráno vyrobí příspěvek o Češích v NHL z noční noci a založí issue ke schválení.
-# Vydává se až komentářem „/vydat“ v issue (úloha vydat.yml). Automaticky jen s proměnnou
-# AUTO_RANNI_PIVO=true a jen když kontrola nic nenašla (pozor = 0).
+# Ranní pivo: každé ráno vyrobí příspěvek o Češích v NHL z noci a pošle ho ke schválení:
+# do Telegramu s tlačítky ✅ Vydat / 🗑 Zahodit (když je bot nastavený), jinak jako issue,
+# kde se vydává komentářem „/vydat“. Automaticky jen s proměnnou AUTO_RANNI_PIVO=true
+# a jen když kontrola nic nenašla (pozor = 0).
 #
 # Postup nastavení je v docs/nastaveni.md. Bez ANTHROPIC_API_KEY vyjdou suché texty bez Vency,
 # bez nastavení R2 se obrázek nenahraje (zůstane v artefaktu běhu) a nic se nevydá.
@@ -79,7 +80,7 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: npm run -s venca -- upload --id "${{ steps.make.outputs.id }}"
 
-      - name: Vydání rovnou, nebo issue ke schválení
+      - name: Vydání rovnou, nebo ke schválení (Telegram / issue)
         if: steps.make.outputs.has_post == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -90,11 +91,28 @@ jobs:
           AUTO: ${{ vars.AUTO_RANNI_PIVO == 'true' }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
           R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
+          TG=false
+          [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && TG=true
           if [ "$AUTO" = true ] && [ "$POZOR" = 0 ] && [ "$UPLOADED" = true ] && [ -n "$IG_ACCESS_TOKEN" ]; then
             echo "Kontrola prošla a vydávání je automatické: vydávám."
-            npm run -s venca -- publish --id "$ID"
+            if [ "$TG" = true ]; then
+              npm run -s venca -- publish --id "$ID" --tg-chat "$TELEGRAM_CHAT_ID"
+            else
+              npm run -s venca -- publish --id "$ID"
+            fi
+            exit 0
+          fi
+          if [ "$TG" = true ] && [ "$UPLOADED" = true ]; then
+            npm run -s venca -- telegram --id "$ID"
             exit 0
           fi
           title="$(npm run -s venca -- issue --id "$ID" --title)"
@@ -105,6 +123,24 @@ jobs:
           gh label create ke-schvaleni --color F5B027 --description 'Koncept čeká na /vydat' 2>/dev/null || true
           npm run -s venca -- issue --id "$ID" > "$RUNNER_TEMP/body.md"
           gh issue create --title "$title" --label ke-schvaleni --body-file "$RUNNER_TEMP/body.md" --assignee "${{ github.repository_owner }}"
+
+      - name: Dnes bez Ranního piva
+        if: steps.make.outputs.has_post == 'false'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID }}
+        run: npm run -s venca -- notify --text "Dnes v noci nehrál žádný Čech, Ranní pivo nebude. 🍺"
+
+      # Když se ráno něco pokazí, majitel se to dozví v Telegramu (bez bota z běhu úlohy).
+      - name: Hlášení chyby do Telegramu
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -d node_modules ] || npm ci
+          npm run -s venca -- notify --text "❌ Ranní pivo se dnes nepovedlo vyrobit. Podrobnosti: $RUN_URL" || true
 
   # Token Instagramu platí 60 dní: každé ráno se prodlouží. Nový token uloží úloha sama jen
   # s tajemstvím SOCIAL_ADMIN_TOKEN (osobní token GitHubu s právem na Secrets), jinak dá vědět issue.

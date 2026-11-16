@@ -18,7 +18,12 @@ Actions**, nikdy v kódu ani v chatu.
 | Variable | `R2_BUCKET` | Název bucketu, např. `venca-stamgast`. |
 | Variable | `R2_PUBLIC_URL` | Veřejná adresa bucketu, např. `https://pub-xxxx.r2.dev` (bez lomítka na konci). |
 | Variable | `VENCA_MODEL` | Volitelné: model Claude (výchozí `claude-sonnet-5-5`). |
-| Variable | `AUTO_RANNI_PIVO` | `true` = Ranní pivo vyjde samo, když kontrola nic nenajde. Bez toho čeká na `/vydat`. |
+| Variable | `AUTO_RANNI_PIVO` | `true` = Ranní pivo vyjde samo, když kontrola nic nenajde. Bez toho čeká na schválení. |
+| Secret | `TELEGRAM_BOT_TOKEN` | Token bota z @BotFather (schvalování v Telegramu). |
+| Variable | `TELEGRAM_CHAT_ID` | Tvoje Telegram ID (číslo): jen ty smíš schvalovat. |
+| Secret | `CLOUDFLARE_API_TOKEN` | Token Cloudflare (šablona „Edit Cloudflare Workers“) pro nasazení bota. |
+| Variable | `CLOUDFLARE_ACCOUNT_ID` | Id účtu Cloudflare. |
+| Secret | `BOT_GITHUB_TOKEN` | Token GitHubu jen s právem **Actions** na tento repozitář: bot jím spouští vydání. |
 
 ## 1. Instagram @venca_stamgast
 
@@ -52,6 +57,29 @@ krátké volání (řádově tisíce tokenů).
 3. Ostré vydání: v issue napiš komentář `/vydat` (nebo `/zahodit`).
 
 Od té chvíle úloha běží každé ráno v 6:10 UTC (7:10 v zimě, 8:10 v létě).
+
+## 5. Telegram (schvalování tlačítkem)
+
+Ráno přijde do Telegramu obrázek s popiskem a tlačítky **✅ Vydat** / **🗑 Zahodit**. Ťuknutí zachytí
+malý Worker v Cloudflare (`worker/`) a spustí vydání; bot pak odpoví odkazem na příspěvek.
+Bez nastaveného bota chodí koncepty dál jako issue.
+
+1. **Bot:** v Telegramu napiš **@BotFather** → `/newbot` → jméno `Venca Štamgast` → uživatelské jméno
+   končící na `bot` (např. `venca_stamgast_bot`). Token, který dostaneš, ulož jako secret `TELEGRAM_BOT_TOKEN`.
+2. **Tvoje ID:** napiš **@userinfobot** → Start. Číslo za `Id` ulož jako variable `TELEGRAM_CHAT_ID`.
+3. **Otevři svého nového bota a dej Start.** Bot nemůže napsat jako první, dokud ho nespustíš.
+4. **Cloudflare:** vpravo nahoře ikona účtu → **Profile** → **API Tokens** → **Create Token** → šablona
+   **Edit Cloudflare Workers** → Account Resources: tvůj účet, Zone Resources: All zones → **Create Token**.
+   Ulož jako secret `CLOUDFLARE_API_TOKEN`; id účtu (je v adrese R2 před `.r2.cloudflarestorage.com`)
+   jako variable `CLOUDFLARE_ACCOUNT_ID`.
+5. **GitHub token pro bota:** ikona účtu na GitHubu → **Settings** → **Developer settings** → **Personal access
+   tokens** → **Fine-grained tokens** → **Generate new token**. Repository access: **Only select repositories** →
+   `venca-stamgast`; Permissions → **Actions: Read and write**. Ulož jako secret `BOT_GITHUB_TOKEN`.
+6. **Actions → Telegram bot (nasazení) → Run workflow.** Úloha nasadí Worker, předá mu klíče a nastaví webhook.
+   Bot ti napíše „Venca je připojený“.
+
+Tlačítka poslechne jen ten, jehož ID je v `TELEGRAM_CHAT_ID`. Po ťuknutí tlačítka hned zmizí a vydání má
+pojistku (`published/<id>.json` v úložišti), takže dvojí ťuknutí nevydá příspěvek dvakrát.
 
 ## Token
 
