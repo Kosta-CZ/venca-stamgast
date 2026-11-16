@@ -100,6 +100,13 @@ const answerShape = (sport: DigestSport) => `Vrať jen tento JSON, bez textu oko
 "nula" je true jen u brankáře, který odchytal celý zápas a jeho tým nedostal gól; u všech ostatních false.`}
 Když nic nenajdeš, vrať {"vykony": [], "zdroje": [], "poznamka": "proč"}.`;
 
+/**
+ * Datum dneška do zadání: bez něj Claude při hledání narazí na staré články a usoudí, že období „ještě
+ * nenastalo“ (zkouška 19.–25. 10. 2026 tak vzdala hledání po pěti dotazech).
+ */
+const dateLine = (p: { from: string; to: string }) =>
+  `Dnes je ${addDays(p.to, 1)}, hledané období už proběhlo a zprávy o něm existují. Do hledání piš i měsíc a rok (např. „Schick listopad 2026“), ať vyhledávač vrátí aktuální články; starší články přeskoč.`;
+
 /** Zadání prvního hledání (české zdroje): najít výkony v období, se seznamem hráčů po hráčích. */
 export function digestPrompt(cfg: DigestConfig, p: { from: string; to: string }, domains: readonly string[]): string {
   const tennis = cfg.sport === 'tenis';
@@ -113,6 +120,7 @@ export function digestPrompt(cfg: DigestConfig, p: { from: string; to: string },
   return `${cfg.zadani}${players}
 
 Najdi ${what} od ${p.from} do ${p.to} (včetně).
+${dateLine(p)}
 Hledej jen na těchto webech: ${domains.join(', ')}.
 ${cfg.vyloucit.length ? `Nikdy nezahrnuj: ${cfg.vyloucit.join(', ')}.\n` : ''}
 Každý zápas uveď zvlášť. Čísla opisuj přesně ze zdroje; zápas, u kterého si nejsi jistý, vynech a napiš ho do "poznamka".
@@ -138,6 +146,7 @@ export function verifyPrompt(cfg: DigestConfig, p: { from: string; to: string },
   return `Ověř tyto zápasy (období ${p.from} až ${p.to}):
 ${list}
 
+${dateLine(p)}
 Hledej jen na těchto webech: ${domains.join(', ')}.
 U každého zápasu, který ve zdroji najdeš, opiš ze zdroje ${numbers}. Datum piš podle místa konání.
 Jméno hráče a soupeře piš přesně tak, jak jsou v seznamu výše, i když je zdroj píše jinak (např. „Kolín nad Rýnem“ místo „Köln“).

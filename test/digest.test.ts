@@ -213,6 +213,9 @@ describe('přehledy: brankáři a čisté konto (Češi v cizině)', () => {
     expect(list).not.toMatch(/nula|čist|2:0/);
     expect(CIZ.hraci).toEqual(expect.arrayContaining(['Antonín Kinský (Tottenham, brankář)', 'Lukáš Horníček (Newcastle, brankář)']));
     expect(digestPrompt(CIZ, P, CIZ.zdroje_b)).toContain('čisté konto');
+    // Dnešní datum v obou zadáních (jinak Claude usoudí, že období ještě nenastalo).
+    expect(digestPrompt(CIZ, P, CIZ.zdroje_b)).toContain('Dnes je 2026-11-23, hledané období už proběhlo');
+    expect(verifyPrompt(CIZ, P, CIZ.zdroje_a, [gk()])).toContain('Dnes je 2026-11-23');
   });
 });
 
