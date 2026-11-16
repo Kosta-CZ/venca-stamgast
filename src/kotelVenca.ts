@@ -88,7 +88,7 @@ export function kotelAllowedNumbers(facts: KotelFacts, date: string): Set<string
 
 /** Muž kola od Vency, jen když v kole skóroval (jméno a tým, bez ohledu na diakritiku). */
 export function findHero(facts: KotelFacts, pick: unknown): { name: string; team: string } | null {
-  const o = (pick && typeof pick === 'object' ? pick : {}) as Record<string, unknown>;
+  const o = (pick && typeof pick === 'object' ? pick : { jmeno: pick }) as Record<string, unknown>;
   const name = str(o.jmeno ?? o.name);
   const team = str(o.tym ?? o.team);
   if (!name) return null;
@@ -108,7 +108,8 @@ export function checkKotelVenca(raw: unknown, facts: KotelFacts, date: string): 
   let hero = findHero(facts, o.muz_kola);
   if (!hero) {
     const fallback = defaultHero(facts.games);
-    if (o.muz_kola && fallback) pozor.push(`Muž kola „${str((o.muz_kola as Record<string, unknown>).jmeno) || JSON.stringify(o.muz_kola)}“ v kole neskóroval, vybral ho kód.`);
+    const picked = typeof o.muz_kola === 'string' ? o.muz_kola : str((o.muz_kola as Record<string, unknown> | null)?.jmeno);
+    if (picked && fallback) pozor.push(`Muž kola „${picked}“ v kole neskóroval, vybral ho kód.`);
     hero = fallback ?? null;
   }
 

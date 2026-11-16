@@ -177,18 +177,25 @@ export const ROUND_SPAN_DAYS = 3;
 
 const dayDiff = (a: string, b: string) => (Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86_400_000;
 
-/** Dny kola, seřazené. */
-export function roundDays(events: readonly Pick<RoundEvent, 'date'>[]): string[] {
+/** Den, kdy se hrála většina zápasů kola (při shodě pozdější). */
+export function mainDay(events: readonly Pick<RoundEvent, 'date'>[]): string | undefined {
   const counts = new Map<string, number>();
   for (const e of events) if (e.date) counts.set(e.date, (counts.get(e.date) ?? 0) + 1);
-  const mode = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0]?.[0];
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0]?.[0];
+}
+
+/** Dny kola, seřazené: hlavní den a dny do ±3 dnů od něj. */
+export function roundDays(events: readonly Pick<RoundEvent, 'date'>[]): string[] {
+  const mode = mainDay(events);
   if (!mode) return [];
-  return [...counts.keys()].filter((d) => Math.abs(dayDiff(d, mode)) <= ROUND_SPAN_DAYS).sort();
+  return [...new Set(events.map((e) => e.date).filter((d): d is string => Boolean(d)))].filter((d) => Math.abs(dayDiff(d, mode)) <= ROUND_SPAN_DAYS).sort();
 }
 
 export interface RoundView {
   round: number;
-  /** Dny kola a poslední z nich (podle něj id konceptu a tabulka). */
+  /** Den, kdy se hrála většina kola: podle něj se pozná, že kolo už proběhlo. */
+  mainDate: string;
+  /** Dny kola, které už proběhly (u budoucího kola všechny), a poslední z nich (id konceptu a tabulka). */
   days: string[];
   date: string;
   dayLabel: string;
@@ -205,10 +212,15 @@ const gameOrder = (a: RoundEvent, b: RoundEvent, home: (e: RoundEvent) => string
 /**
  * Kolo pro příspěvek: zápasy s českými názvy týmů, konec zápasu (pp, sn), odložené zápasy s novým datem
  * a zápasy, kterým ještě chybí výsledek. Pořadí jako u ČTK: podle začátku, pak podle domácích.
+ * Zápas přesunutý na den, který ještě nebyl, se ukáže jako „hraje se …“ a kolo kvůli němu nečeká.
  */
 export function roundView(r: StoredRound, name: TeamNamer, today: string): RoundView {
-  const days = roundDays(r.events.filter((e) => isFinal(e) || !e.postponed));
+  const counted = r.events.filter((e) => isFinal(e) || !e.postponed);
+  const window = roundDays(counted);
+  const past = window.filter((d) => d <= today);
+  const days = past.length ? past : window;
   const last = days[days.length - 1] ?? r.events.map((e) => e.date ?? '').sort().pop() ?? today;
+  const mainDate = mainDay(counted) ?? last;
   const unknownTeams = new Set<string>();
   const cz = (id: string | null, raw: string) => {
     const n = name(id, raw);
@@ -237,7 +249,7 @@ export function roundView(r: StoredRound, name: TeamNamer, today: string): Round
     return g;
   });
 
-  return { round: r.round, days, date: last, dayLabel: daysLabel(days.length ? days : [last]), games, missing, unknownTeams: [...unknownTeams] };
+  return { round: r.round, mainDate, days, date: last, dayLabel: daysLabel(days.length ? days : [last]), games, missing, unknownTeams: [...unknownTeams] };
 }
 
 /** „neděle 15. 11.“, „čtvrtek 19. 11. a pátek 20. 11.“, u tří a více dnů rozsah „19.–22. 9.“. */
@@ -249,9 +261,9 @@ export function daysLabel(days: readonly string[]): string {
   return m1 === m2 ? `${d1}.–${shortDate(last)}` : `${shortDate(first)}–${shortDate(last)}`;
 }
 
-/** Kolo, které se už odehrálo: poslední den minul, nebo je dnes a všechno je dohrané. */
+/** Kolo, které se už odehrálo: hlavní den kola minul, nebo je dnes a všechno je dohrané. */
 export const roundIsPast = (v: RoundView, today: string): boolean =>
-  v.date < today || (v.date === today && v.missing.length === 0 && v.games.some(played));
+  v.mainDate < today || (v.mainDate === today && v.missing.length === 0 && v.games.some(played));
 
 /** Poslední odehrané kolo (pro sobotní příspěvek); undefined na začátku sezóny. */
 export function latestRound(views: readonly RoundView[], today: string): RoundView | undefined {

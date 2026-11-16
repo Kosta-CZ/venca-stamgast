@@ -4,7 +4,7 @@
 // Odkazy na zdroje jdou do zprávy ke schválení; odkaz, který Claude ve vyhledávání neviděl, se nepočítá.
 
 import { askWithSearch, normalizeUrl, onDomains, type ClaudeIo } from './claude.ts';
-import { checkScorers, played, scoreText, type Ending, type KotelGame, type KotelScorer, type TeamNamer } from './kotel.ts';
+import { checkScorers, expectedScorerGoals, played, scoreText, type Ending, type KotelGame, type KotelScorer, type TeamNamer } from './kotel.ts';
 import { ascii } from './nhl.ts';
 import { parseJsonLoose } from './venca.ts';
 
@@ -56,7 +56,7 @@ export function scorersPrompt(round: number, dayLabel: string, season: string, g
     system:
       'Jsi pečlivý sportovní redaktor. Dohledáváš střelce zápasů české hokejové extraligy v českých zpravodajských zdrojích. '
       + 'Vycházíš jen z toho, co ve zdrojích opravdu najdeš: nic nedomýšlíš a nic nedopočítáváš. Odpovídáš jen platným JSON.',
-    user: `Dohledej střelce zápasů ${round}. kola hokejové extraligy, sezóna ${year}, hraného ${dayLabel}.
+    user: `Dohledej střelce zápasů ${round}. kola hokejové extraligy, sezóna ${year} (dny kola: ${dayLabel}).
 
 Hledej jen na ceskenoviny.cz (zpravodajství ČTK), hokej.cz a sport.ceskatelevize.cz. Nejrychlejší bývá souhrn kola od ČTK nebo zápisy zápasů s řádkem „Branky:“.
 
@@ -83,7 +83,8 @@ function scorerList(v: unknown): KotelScorer[] {
     const o = (s && typeof s === 'object' ? s : {}) as Record<string, unknown>;
     const name = (typeof o.jmeno === 'string' ? o.jmeno : typeof o.name === 'string' ? o.name : '').trim().replace(/\s+/g, ' ');
     if (!name) continue;
-    const goals = Number.isInteger(o.goly) && (o.goly as number) > 0 ? (o.goly as number) : 1;
+    const n = Number(o.goly ?? o.goals);
+    const goals = Number.isInteger(n) && n > 0 ? n : 1;
     out.set(name, (out.get(name) ?? 0) + goals);
   }
   return [...out].map(([name, goals]) => ({ name, goals }));
@@ -175,7 +176,7 @@ export function applyScorers(games: readonly KotelGame[], report: readonly Repor
       }
     }
     if (filled.homeScorers.length + filled.awayScorers.length > 0) pozor.push(...checkScorers(filled));
-    else if ((g.homeGoals ?? 0) + (g.awayGoals ?? 0) > 0) pozor.push(`Střelci zápasu ${label} chybí.`);
+    else if (expectedScorerGoals(g, 'home') + expectedScorerGoals(g, 'away') > 0) pozor.push(`Střelci zápasu ${label} chybí.`);
     if (g.ending === 'so' && !filled.shootoutWinner) pozor.push(`${label}: chybí, kdo proměnil rozhodující nájezd.`);
 
     let good = 0;

@@ -142,10 +142,12 @@ jobs:
           WHY: ${{ steps.make.outputs.why }}
           LAST: ${{ steps.what.outputs.last }}
         run: |
-          if [ "$LAST" = true ]; then
+          if [ "$GITHUB_EVENT_NAME" != schedule ]; then
+            next="Spusť úlohu Speciál (výsledek) znovu, až bude výsledek venku."
+          elif [ "$LAST" = true ]; then
             next="Ani teď ho nemám, spusť prosím úlohu Speciál ručně (výsledek), až bude venku."
           else
-            next="Zkusím to znovu za hodinu a půl, nebo spusť úlohu Speciál ručně (výsledek)."
+            next="Zkusím to znovu v 0:53, nebo spusť úlohu Speciál ručně (výsledek)."
           fi
           npm run -s venca -- notify --text "🥊 Výsledek zápasu zatím není potvrzený ve dvou zdrojích ($WHY). $next"
 

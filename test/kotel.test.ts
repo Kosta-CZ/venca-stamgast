@@ -184,6 +184,31 @@ describe('kolo a tabulka', () => {
     expect(latestRound(views, today)?.round).toBe(20);
   });
 
+  it('sobota ráno: zápas kola přesunutý na neděli kolo nezdrží, ukáže se „hraje se“', () => {
+    const today = '2026-11-21';
+    const r20 = round(20, [
+      ev('Budějovice', 'Sparta', '2:3', '2026-11-19'),
+      ev('Plzeň', 'Pardubice', '1:2', '2026-11-20'), ev('Olomouc', 'Liberec', '4:2', '2026-11-20'), ev('Litvínov', 'Třinec', '0:3', '2026-11-20'),
+      ev('Boleslav', 'Kometa', null, '2026-11-22'),
+    ]);
+    const views = [round(19, [ev('Kladno', 'Třinec', '1:4', '2026-11-15')]), r20].map((r) => roundView(r, name, today));
+    const v = latestRound(views, today)!;
+    expect(v.round).toBe(20);
+    expect(v.date).toBe('2026-11-20');
+    expect(v.dayLabel).toBe('čtvrtek 19. 11. a pátek 20. 11.');
+    expect(v.missing).toEqual([]);
+    expect(v.games.find((g) => g.home === 'Boleslav')?.postponedTo).toBe('2026-11-22');
+  });
+
+  it('sobota ráno: kolo hrané v sobotu a v neděli se ještě nebere', () => {
+    const today = '2026-01-30';
+    const views = [
+      round(41, [ev('Kladno', 'Třinec', '1:4', '2026-01-29'), ev('Sparta', 'Plzeň', '2:1', '2026-01-29')]),
+      round(42, [ev('Liberec', 'Kometa', null, '2026-01-30'), ev('Olomouc', 'Vítkovice', null, '2026-01-30'), ev('Pardubice', 'Litvínov', null, '2026-01-31')]),
+    ].map((r) => roundView(r, name, today));
+    expect(latestRound(views, today)?.round).toBe(41);
+  });
+
   it('chybějící výsledek po odehraném dni se ohlásí', () => {
     const v = roundView(round(20, [ev('Plzeň', 'Pardubice', '1:2', '2026-11-20'), ev('Olomouc', 'Liberec', null, '2026-11-20')]), name, '2026-11-21');
     expect(v.missing).toEqual(['Olomouc – Liberec']);
@@ -211,6 +236,14 @@ describe('střelci', () => {
     expect(g?.awayScorers).toEqual([{ name: 'Daňo', goals: 3 }]);
     expect(() => parseScorerReport('Nic jsem nenašel.')).toThrow();
     expect(() => parseScorerReport('{"kolo": 19}')).toThrow(/zápas/);
+  });
+
+  it('nájezdy po 0:0 (1:0 sn) nemají střelce a není to chyba; góly jako text se počítají', () => {
+    const g: KotelGame = { home: 'Kladno', away: 'Třinec', homeGoals: 1, awayGoals: 0, ending: 'so', homeScorers: [], awayScorers: [] };
+    const report: ReportGame[] = [{ home: 'Kladno', away: 'Třinec', score: '1:0 sn', homeScorers: [], awayScorers: [], shootoutWinner: 'Kempný', sources: SEEN, note: '' }];
+    expect(applyScorers([g], report, { seen: SEEN, name }).pozor).toEqual([]);
+    const [p] = parseScorerReport('{"zapasy":[{"domaci":"A","hoste":"B","skore":"2:0","strelci_domaci":[{"jmeno":"X","goly":"2"}],"strelci_hoste":[]}]}');
+    expect(p?.homeScorers).toEqual([{ name: 'X', goals: 2 }]);
   });
 
   it('skóre ze zdroje', () => {
@@ -299,8 +332,11 @@ describe('Venca v Kotli', () => {
     expect(v.muz_kola?.name).toBe('Daňo');
   });
 
-  it('muž kola se najde i bez diakritiky', () => {
+  it('muž kola se najde i bez diakritiky a i když je zapsaný jen jménem', () => {
     expect(findHero(facts, { jmeno: 'Merezko', tym: 'Plzen' })).toEqual({ name: 'Merežko', team: 'Plzeň' });
+    expect(findHero(facts, 'Daňo')).toEqual({ name: 'Daňo', team: 'Třinec' });
+    const v = checkKotelVenca({ ...ok, muz_kola: 'Vladař' }, facts, '2026-11-15');
+    expect(v.pozor).toContain('Muž kola „Vladař“ v kole neskóroval, vybral ho kód.');
   });
 
   it('povolená čísla: kolo, skóre, góly, tabulka, odstupy a datum odloženého zápasu', () => {

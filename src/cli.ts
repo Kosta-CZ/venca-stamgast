@@ -49,7 +49,8 @@ function arg(name: string): string | undefined {
 const flag = (name: string) => process.argv.includes(`--${name}`);
 
 function output(key: string, value: string): void {
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
+  // Výstup je řádek klíč=hodnota: zalomení řádku v hodnotě (třeba poznámka z hledání) by soubor rozbilo.
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value.replace(/[\r\n]+/g, ' ')}\n`);
 }
 
 export function pragueToday(at = new Date()): string {
