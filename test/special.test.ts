@@ -69,6 +69,20 @@ describe('speciál: dva nezávislé zdroje', () => {
     ]);
   });
 
+  it('pozvánka: český zdroj bez pásma je náš čas; doplňkový údaj jen z jednoho zdroje se vynechá bez výhrady', () => {
+    const { facts, pozor } = confirmInvite(EVENT, { ...inviteA, arena: null }, { ...inviteB, start: { time: 'cca od 19:00', zone: '' }, rounds: null }, []);
+    expect(pozor).toEqual([]);
+    expect(facts.rows).toEqual([
+      { label: 'Akce', value: 'UFC Fight Night' },
+      { label: 'Místo', value: 'Dauhá' },
+      { label: 'Hlavní karta', value: 'sobota 19:00 našeho času' },
+      { label: 'Zápas', value: 'polotěžká váha' },
+    ]);
+    const conflict = confirmInvite(EVENT, inviteA, { ...inviteB, rounds: 3 }, []);
+    expect(conflict.pozor).toEqual(['Počet kol: zdroje se liší (5 × 3), do grafiky nejde.']);
+    expect(conflict.facts.rows.at(-1)).toEqual({ label: 'Zápas', value: 'polotěžká váha' });
+  });
+
   it('pozvánka: rozpor, chybějící údaj a jiný soupeř jdou do pozor', () => {
     const { pozor } = confirmInvite(EVENT, { ...inviteA, opponentRecord: '12-0-0', opponent: 'Carlos Ulberg' }, { ...inviteB, start: null, opponent: 'Carlos Ulberg' }, []);
     const p = pozor.join('\n');

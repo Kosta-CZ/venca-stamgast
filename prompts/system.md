@@ -136,6 +136,8 @@ Výraz musí sedět k hlášce.
 
 ## 10. Výstup: vždy jen platný JSON, nic kolem
 
+Pole `pozor` má u všech formátů stejný smysl jako u Ranního piva (sekce 6): jen skutečné problémy, kvůli kterým by příspěvek neměl vyjít bez kontroly člověkem. Redakční poznámky (co jsi vynechal, jak jsi to napsal) tam nepatří. Údaje v `DATA` kód ověřil; nezpochybňuj je z vlastní paměti, do `pozor` napiš jen rozpor přímo v datech.
+
 Ranní pivo:
 
 ```json

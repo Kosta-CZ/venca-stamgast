@@ -170,8 +170,19 @@ const CITY_ALIASES: Record<string, string> = { doha: 'dauha', 'ad-dauha': 'dauha
 const city = (c: string) => CITY_ALIASES[ascii(c)] ?? ascii(c);
 const methodClass = (m: string) => (/^t?ko$/i.test(m) ? 'ko' : ascii(m));
 
-/** Porovná údaj z obou hledání; rozpor nebo chybějící údaj zapíše do `pozor`. Vrací hodnotu z A (nebo jedinou). */
-function agree<T>(label: string, a: T | null, b: T | null, same: (x: T, y: T) => boolean, show: (x: T) => string, pozor: string[]): T | null {
+/**
+ * Porovná údaj z obou hledání; rozpor nebo chybějící údaj zapíše do `pozor`. Vrací hodnotu z A (nebo jedinou).
+ * Doplňkový údaj (`optional`) se vrátí, jen když sedí v obou zdrojích; jinak se do grafiky nedá a ohlásí se jen rozpor.
+ */
+function agree<T>(label: string, a: T | null, b: T | null, same: (x: T, y: T) => boolean, show: (x: T) => string, pozor: string[], optional = false): T | null {
+  if (optional) {
+    if (a === null || b === null) return null;
+    if (!same(a, b)) {
+      pozor.push(`${label}: zdroje se liší (${show(a)} × ${show(b)}), do grafiky nejde.`);
+      return null;
+    }
+    return a;
+  }
   if (a === null && b === null) {
     pozor.push(`${label}: nenašel ho ani jeden zdroj.`);
     return null;
@@ -227,16 +238,17 @@ export function confirmInvite(e: SpecialEvent, a: InviteReport, b: InviteReport,
   const czechRec = agree('Bilance Čecha', parseRecord(a.czechRecord), parseRecord(b.czechRecord), (x, y) => recordText(x) === recordText(y), recordText, pozor);
   const oppRec = agree('Bilance soupeře', parseRecord(a.opponentRecord), parseRecord(b.opponentRecord), (x, y) => recordText(x) === recordText(y), recordText, pozor);
   const cityName = agree('Město', a.city, b.city, (x, y) => city(x) === city(y), (x) => x, pozor);
-  const arena = agree('Hala', a.arena, b.arena, (x, y) => ascii(x).includes(ascii(y)) || ascii(y).includes(ascii(x)), (x) => x, pozor);
+  const arena = agree('Hala', a.arena, b.arena, (x, y) => ascii(x).includes(ascii(y)) || ascii(y).includes(ascii(x)), (x) => x, pozor, true);
   const date = agree('Datum', a.date, b.date, (x, y) => x === y, (x) => x, pozor);
   if (date && date !== e.datum) pozor.push(`Datum ve zdrojích (${date}) nesedí se zadáním (${e.datum}).`);
-  const conv = (r: InviteReport) => (r.start ? toPrague(r.date ?? e.datum, r.start.time, r.start.zone, e.pasmo) : null);
-  const [sa, sb] = [conv(a), conv(b)];
+  // České zdroje (B) píšou čas bez pásma: je to náš čas.
+  const conv = (r: InviteReport, fallbackZone: string) => (r.start ? toPrague(r.date ?? e.datum, r.start.time, r.start.zone || fallbackZone, e.pasmo) : null);
+  const [sa, sb] = [conv(a, ''), conv(b, 'SEČ')];
   if (a.start && !sa) pozor.push(`Čas ze zdroje A nejde převést (${a.start.time} ${a.start.zone}).`);
   if (b.start && !sb) pozor.push(`Čas ze zdroje B nejde převést (${b.start.time} ${b.start.zone}).`);
   const start = agree('Začátek hlavní karty', sa, sb, (x, y) => x.date === y.date && x.time === y.time, (x) => `${dayLabel(x.date)} ${x.time}`, pozor);
-  const weight = agree('Váhová kategorie', a.weightClass, b.weightClass, (x, y) => ascii(x).replace(/ vaha$/, '') === ascii(y).replace(/ vaha$/, ''), (x) => x, pozor);
-  const rounds = agree('Počet kol', a.rounds, b.rounds, (x, y) => x === y, String, pozor);
+  const weight = agree('Váhová kategorie', a.weightClass, b.weightClass, (x, y) => ascii(x).replace(/ vaha$/, '') === ascii(y).replace(/ vaha$/, ''), (x) => x, pozor, true);
+  const rounds = agree('Počet kol', a.rounds, b.rounds, (x, y) => x === y, String, pozor, true);
 
   const rows = [
     { label: 'Akce', value: e.akce },
@@ -305,7 +317,7 @@ Vrať jen tento JSON, bez textu okolo:
   "vaha": "váhová kategorie zápasu, jedna z: ${WEIGHT_CLASSES.join(', ')}",
   "pocet_kol": 5,
   "zdroje": ["adresy stránek, ze kterých údaje máš"],
-  "poznamka": "co je sporné, jinak prázdné"
+  "poznamka": "jednou větou, jen když se zdroje mezi sebou liší nebo je údaj nejistý; jinak prázdné. Nepopisuj postup."
 }
 Údaj, který ve zdrojích nenajdeš, nech null. Když zápas nenajdeš vůbec, vrať {"nalezeno": false, "poznamka": "proč"}.`;
 }
@@ -323,7 +335,7 @@ Jinak vrať jen tento JSON, bez textu okolo:
   "kolo": 2,
   "cas": "čas v kole, kdy zápas skončil, m:ss",
   "zdroje": ["adresy stránek, ze kterých výsledek máš"],
-  "poznamka": "co je sporné, jinak prázdné"
+  "poznamka": "jednou větou, jen když se zdroje mezi sebou liší nebo je údaj nejistý; jinak prázdné. Nepopisuj postup."
 }`;
 }
 
@@ -396,6 +408,7 @@ export function specialUserMessage(f: SpecialFacts): string {
     souper: f.opponent,
     ...(f.stage === 'vysledek' ? { vitez: f.winner ?? 'bez vítěze' } : {}),
     udaje: Object.fromEntries(f.rows.map((r) => [r.label.toLowerCase(), r.value])),
+    overeni: 'Všechny údaje kód ověřil ve dvou nezávislých zdrojích.',
   };
   return `FORMÁT: ${f.stage === 'pozvanka' ? 'mma_pozvanka' : 'mma_vysledek'}\nDATUM: ${f.datum}\nDATA:\n${JSON.stringify(data, null, 2)}`;
 }
