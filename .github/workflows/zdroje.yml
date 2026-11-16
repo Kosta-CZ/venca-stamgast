@@ -1,0 +1,26 @@
+# Kontrola zdrojů dat: co vrací API-Sports (tajemství API_SPORTS_KEY) pro extraligu, Chance Ligu
+# a reprezentace. Jen ruční spuštění. Vypisuje sportovní data a tarif, nikdy klíč ani údaje o účtu.
+
+name: Zdroje dat (kontrola)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-sports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: API-Sports
+        env:
+          API_SPORTS_KEY: ${{ secrets.API_SPORTS_KEY }}
+        run: node scripts/sources.mjs
