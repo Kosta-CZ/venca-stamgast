@@ -47,11 +47,14 @@ Místní vykreslení bez Playwright prohlížeče: `CHROME_PATH=/cesta/k/chrome 
 
 ## Co bude dál
 
-Další formáty z plánu (Víkendová účtenka, Extraligový kotel, Štamgast hodnotí, Venca vs. Jarda) berou data
-z API-Sports (`API_SPORTS_KEY`, jeden klíč pro API-Football i API-Hockey); šablony v2 jsou na plátně
-„Štamgast – ukázkové příspěvky“. Id: extraliga 10, Chance Liga (`Czech Liga`) 345, repre hokej 1322, fotbal 770.
-Tarif Free má jen sezóny 2022–2024 (aktuální vrací chybu `plan`), na ostrý provoz je potřeba placený tarif.
-Hokej má výsledky po třetinách, střelce a asistence (jména bez diakritiky, s iniciálou) a tabulku; fotbal góly,
-karty s minutou a důvodem, VAR a tabulku (jména se v událostech občas píšou dvojím způsobem).
-Co klíč vrací, ukáže ruční úloha `zdroje.yml` (`scripts/sources.mjs`, volitelně starší sezóna).
+Další formáty z plánu (Víkendová účtenka, Extraligový kotel, Štamgast hodnotí, Venca vs. Jarda); šablony v2
+jsou na plátně „Štamgast – ukázkové příspěvky“. **Za data se neplatí** (rozhodnutí majitele), berou se z volných
+zdrojů s výslovným svolením, ne stahováním cizích webů. Hlavní je TheSportsDB (veřejný klíč `123`, bez registrace):
+extraliga 4923, Chance Liga 4631. Zdarma dává celé kolo (`eventsround`; konec `FT`, prodloužení `AOT`, nájezdy `AP`,
+odložené `NS` s novým datem), ale z `eventspastleague` jen jeden zápas, ze sezóny jen 15 zápasů, fotbalovou tabulku
+zkrácenou, extraligovou vůbec a žádné střelce ani karty; po pár rychlých dotazech vrací 429. Tabulky se proto
+počítají z uložených výsledků kol (extraliga 3-2-1-0). Názvy týmů jsou smíšené (s diakritikou i bez, „Sparta
+Prague“), převádí se vlastní tabulkou. API-Sports (`API_SPORTS_KEY`) by uměl i střelce a karty, ale aktuální sezónu
+jen placeně (Free má 2022–2024). Co který zdroj vrací, ukáže ruční úloha `zdroje.yml` (`scripts/sources-free.mjs`,
+`scripts/sources.mjs`).
 Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická stránka čtoucí koncepty z R2).
