@@ -1,4 +1,5 @@
-# Přehledy ze dvou zdrojů (data/prehledy/*.json): tenis denně, legionáři a Češi ve fotbale v cizině v pondělí.
+# Přehledy ze dvou zdrojů (data/prehledy/*.json): legionáři a Češi ve fotbale v cizině v pondělí. Tenis (denně)
+# je od 17. 11. 2026 vypnutý kvůli ceně (rozhodnutí majitele); jde spustit ručně, zapne se vrácením řádku cron.
 # Výkony dohledá Claude API dvakrát nezávisle (mezinárodní a české zdroje); do grafiky jde jen to, co sedí
 # v obou. Koncept jde ke schválení do Telegramu (✅ Vydat / 🗑 Zahodit, vydává vydat.yml), nikdy nevychází sám.
 #
@@ -8,7 +9,7 @@ name: Přehledy
 
 on:
   schedule:
-    - cron: '23 8 * * *'    # tenis: 9:23 v zimě, včerejší zápasy
+    # - cron: '23 8 * * *'  # tenis: 9:23 v zimě, včerejší zápasy (zatím vypnutý kvůli ceně)
     - cron: '23 9 * * 1'    # legionáři: pondělí 10:23, minulý týden
     - cron: '23 10 * * 1'   # Češi v cizině: pondělí 11:23, minulý týden
   workflow_dispatch:

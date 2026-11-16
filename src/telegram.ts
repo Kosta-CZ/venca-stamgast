@@ -2,6 +2,7 @@
 // a hlášení výsledku vydání. Tlačítka zachytí Worker (worker/src/index.ts) a spustí vydat.yml.
 // Token bota se nikdy nevypisuje: chyby ho maskují.
 
+import { KC_PER_USD } from './claude.ts';
 import type { Draft } from './draft.ts';
 import { DIGEST_EMOJI } from './digest.ts';
 import { leagueOf } from './leagues.ts';
@@ -89,7 +90,8 @@ export function approvalText(d: Draft): string {
     : d.kind === 'special' || d.kind === 'prehled'
       ? sourcesText(d.facts.sources.map((url) => ({ url, games: [] })), 'Zdroje (dvě nezávislá hledání)')
       : '';
-  return [approvalHeader(d), tgEscape(d.caption), sources, check].filter(Boolean).join('\n\n');
+  const cost = d.costUsd !== undefined ? `💰 Claude API: asi ${(d.costUsd * KC_PER_USD).toFixed(1).replace('.', ',')} Kč` : '';
+  return [approvalHeader(d), tgEscape(d.caption), sources, check, cost].filter(Boolean).join('\n\n');
 }
 
 /**

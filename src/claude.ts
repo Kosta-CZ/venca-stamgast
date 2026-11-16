@@ -25,10 +25,75 @@ function client(io: ClaudeIo, maxRetries = 4): Anthropic {
 const describe = (m: Message, text: string) =>
   `Claude (${m.model}): konec ${m.stop_reason ?? '?'}, bloky ${[...new Set(m.content.map((c) => c.type))].join(', ') || 'žádné'}, ${text.length} znaků textu.`;
 
-/** Spotřeba tokenů do logu (podle ní se dá odhadnout, kolik který běh stojí kredit). */
-const inputTokens = (u: Anthropic.Beta.BetaUsage) => u.input_tokens + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+// ---- Spotřeba a cena ----
+
+/**
+ * Ceník Claude API v dolarech za milion tokenů (zápis do cache na 5 minut). Hledání stojí $10 za 1000,
+ * stažení stránky jen tokeny. Model mimo ceník se v logu ukáže jako „cena neznámá“.
+ */
+const PRICES: Record<string, { input: number; output: number; cacheWrite: number; cacheRead: number }> = {
+  'claude-sonnet-5-5': { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.1 },
+  'claude-opus-5-5': { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 },
+};
+const SEARCH_USD = 0.01;
+/** Hrubý přepočet do korun, jen pro log a zprávu ke schválení. */
+export const KC_PER_USD = 22;
+
+type Usage = Anthropic.Beta.BetaUsage;
+
+/** Cena jedné odpovědi v dolarech, nebo null, když model není v ceníku. */
+export function costUsd(model: string, u: Usage): number | null {
+  const p = PRICES[model];
+  if (!p) return null;
+  const tokens = u.input_tokens * p.input + (u.cache_creation_input_tokens ?? 0) * p.cacheWrite + (u.cache_read_input_tokens ?? 0) * p.cacheRead + u.output_tokens * p.output;
+  return tokens / 1e6 + (u.server_tool_use?.web_search_requests ?? 0) * SEARCH_USD;
+}
+
+/** Útrata celého běhu (všechna volání Claude API); `priced` je false, když některý model nebyl v ceníku. */
+export const spend = { usd: 0, priced: true };
+
+interface Tally {
+  input: number;
+  cacheWrite: number;
+  cacheRead: number;
+  output: number;
+  thinking: number;
+  searches: number;
+  fetches: number;
+  usd: number;
+  priced: boolean;
+}
+
+const newTally = (): Tally => ({ input: 0, cacheWrite: 0, cacheRead: 0, output: 0, thinking: 0, searches: 0, fetches: 0, usd: 0, priced: true });
+
+function addUsage(t: Tally, model: string, u: Usage): void {
+  t.input += u.input_tokens;
+  t.cacheWrite += u.cache_creation_input_tokens ?? 0;
+  t.cacheRead += u.cache_read_input_tokens ?? 0;
+  t.output += u.output_tokens;
+  t.thinking += u.output_tokens_details?.thinking_tokens ?? 0;
+  t.searches += u.server_tool_use?.web_search_requests ?? 0;
+  t.fetches += u.server_tool_use?.web_fetch_requests ?? 0;
+  const c = costUsd(model, u);
+  if (c === null) {
+    t.priced = false;
+    spend.priced = false;
+  } else {
+    t.usd += c;
+    spend.usd += c;
+  }
+}
+
 const kilo = (n: number) => (n >= 10000 ? `${Math.round(n / 1000)} tis.` : String(n));
-const tokenText = (input: number, output: number) => `Tokeny: vstup ${kilo(input)}, výstup ${kilo(output)}.`;
+
+/** Cena v dolarech a hrubě v korunách: „$0.123 (asi 2,7 Kč)“. */
+export const usdText = (usd: number) => `$${usd.toFixed(3)} (asi ${(usd * KC_PER_USD).toFixed(1).replace('.', ',')} Kč)`;
+
+function tallyText(t: Tally): string {
+  const cache = t.cacheRead ? ` (z cache ${kilo(t.cacheRead)})` : '';
+  const think = t.thinking ? ` (přemýšlení ${kilo(t.thinking)})` : '';
+  return `Tokeny: vstup ${kilo(t.input + t.cacheWrite + t.cacheRead)}${cache}, výstup ${kilo(t.output)}${think}. Cena ${t.priced ? usdText(t.usd) : 'neznámá (model mimo ceník)'}.`;
+}
 
 /** Srozumitelná chyba API (došlý kredit, odmítnutý klíč); klíč samotný se nikdy nevypisuje. */
 export function apiError(err: unknown): Error {
@@ -53,7 +118,9 @@ export async function askClaude(io: ClaudeIo, system: string, user: string, log:
     throw apiError(err);
   });
   const text = textOf(m.content);
-  log(`${describe(m, text)} ${tokenText(inputTokens(m.usage), m.usage.output_tokens)}`);
+  const t = newTally();
+  addUsage(t, m.model, m.usage);
+  log(`${describe(m, text)} ${tallyText(t)}`);
   return text;
 }
 
@@ -114,6 +181,9 @@ export function blockedDomains(err: unknown): string[] {
  * Dotaz s vyhledáváním (web_search) a stahováním stránek (web_fetch), obojí jen na `domains`.
  * Web, který vyhledávání blokuje, se vyřadí a hledá se bez něj. Dlouhé hledání API přeruší
  * (`pause_turn`): odpověď se pošle zpátky a pokračuje se, nejvýš 5×.
+ *
+ * Cache: při hledání Claude každý další krok znovu čte všechno, co už našel. S cache (`cache_control`)
+ * se to opakované čtení platí za 5 % ceny, jinak by byla většina útraty za čtení stejných stránek.
  */
 export async function askWithSearch(io: ClaudeIo, ask: SearchAsk, log: (line: string) => void = () => {}): Promise<SearchAnswer> {
   const c = client(io, 2);
@@ -124,10 +194,7 @@ export async function askWithSearch(io: ClaudeIo, ask: SearchAsk, log: (line: st
   ];
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: ask.user }];
   const all: Block[] = [];
-  let searches = 0;
-  let fetches = 0;
-  let tokensIn = 0;
-  let tokensOut = 0;
+  const t = newTally();
   let m: Message | undefined;
   for (let turn = 0; turn < 6; turn++) {
     try {
@@ -137,6 +204,7 @@ export async function askWithSearch(io: ClaudeIo, ask: SearchAsk, log: (line: st
         system: ask.system,
         messages,
         tools: tools(),
+        cache_control: { type: 'ephemeral' },
         betas: BETAS,
         fallbacks: 'default',
       });
@@ -152,18 +220,15 @@ export async function askWithSearch(io: ClaudeIo, ask: SearchAsk, log: (line: st
       throw apiError(err);
     }
     all.push(...m.content);
-    searches += m.usage.server_tool_use?.web_search_requests ?? 0;
-    fetches += m.usage.server_tool_use?.web_fetch_requests ?? 0;
-    tokensIn += inputTokens(m.usage);
-    tokensOut += m.usage.output_tokens;
+    addUsage(t, m.model, m.usage);
     if (m.stop_reason !== 'pause_turn') break;
     log('Claude hledá dlouho (pause_turn), pokračuji.');
     messages.push({ role: 'assistant', content: m.content });
   }
   if (!m) throw new Error('Claude neodpověděl.');
   const text = finalText(all);
-  log(`${describe(m, text)} Hledání ${searches}×, stažené stránky ${fetches}×. ${tokenText(tokensIn, tokensOut)}`);
-  return { text, seen: seenUrls(all), searches, fetches, model: m.model, stopReason: m.stop_reason };
+  log(`${describe(m, text)} Hledání ${t.searches}×, stažené stránky ${t.fetches}×. ${tallyText(t)}`);
+  return { text, seen: seenUrls(all), searches: t.searches, fetches: t.fetches, model: m.model, stopReason: m.stop_reason };
 }
 
 /** Patří adresa na některou z domén (nebo jejich subdoménu)? */

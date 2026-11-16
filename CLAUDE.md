@@ -20,7 +20,7 @@ komentáře česky.
 4. `.github/workflows/fotbal.yml` v pondělí ráno vyrobí kolo fotbalové 1. ligy stejným kódem jako Kotel
    (`src/leagues.ts`; v textech vždy „1. liga“, oficiální název nese jméno sázkové kanceláře).
    `.github/workflows/prehledy.yml` dělá přehledy ze dvou zdrojů (`src/digest.ts`, `data/prehledy/*.json`):
-   tenis denně, hokejoví legionáři a Češi ve fotbale v cizině v pondělí.
+   hokejoví legionáři a Češi ve fotbale v cizině v pondělí (tenis denně je kvůli ceně zatím vypnutý).
 5. `.github/workflows/specialy.yml` dělá speciál k velké akci Čecha podle `data/specialy/*.json`: odpoledne pozvánku,
    po zápase výsledek (`src/special.ts`, šablona `src/render/special.ts`). Fakta ze dvou nezávislých hledání
    (mezinárodní a české zdroje), kód je porovná údaj po údaji. Obě verze se schvalují v Telegramu.
@@ -104,8 +104,8 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
 - **1. liga** (`fotbal.yml`): pondělí 7:53 (čeká, až se kolo dohraje), záloha v úterý; kolo starší než 3 dny
   (po reprezentační pauze) se neposílá. TheSportsDB liga 4631, kola v R2 `liga/<sezóna>/`, id `<den>-liga`.
   Tabulka po 14. kole sedí s ČTK (test). Nadstavba po 30. kole (skupiny) zatím počítaná není.
-- **Přehledy** (`prehledy.yml`): tenis denně 9:23 (v `data/prehledy/tenis.json` je období do konce Australian
-  Open), legionáři (SHL, Liiga, DEL, National League, ICEHL, AHL; **KHL nikdy**) a Češi v cizině v pondělí.
+- **Přehledy** (`prehledy.yml`): tenis denně 9:23 je od 17. 11. vypnutý kvůli ceně (rozhodnutí majitele; v
+  `data/prehledy/tenis.json` je období do konce Australian Open, zapíná se řádkem `cron`), legionáři (SHL, Liiga, DEL, National League, ICEHL, AHL; **KHL nikdy**) a Češi v cizině v pondělí.
   Volná strukturovaná data k nim nejsou: výkony dohledá Claude dvakrát nezávisle (zdroje A mezinárodní,
   B české) a do grafiky jde jen to, co sedí v obou (hráč, den ±1, soupeř, skóre, góly/asistence, výsledek).
 

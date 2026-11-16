@@ -40,6 +40,11 @@ describe('Telegram: zpráva ke schválení', () => {
     expect(approvalText({ ...draft, pozor: [] })).toContain('Kontrola čísel prošla');
   });
 
+  it('ukáže, kolik výroba stála za Claude API (jen když se AI volala)', () => {
+    expect(approvalText({ ...draft, costUsd: 0.4123 })).toContain('💰 Claude API: asi 9,1 Kč');
+    expect(approvalText(draft)).not.toContain('Claude API');
+  });
+
   it('data tlačítek se vejdou do limitu Telegramu a Worker jim rozumí', () => {
     const kb = approvalKeyboard(draft.id).inline_keyboard[0]!;
     for (const b of kb) {

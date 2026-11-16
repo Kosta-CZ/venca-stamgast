@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import { postFacts } from './facts.ts';
 import { fetchNight, nhlDateFor, type CzPlayer, type Night } from './nhl.ts';
 import { caption, checkVenca, dayLabel, fallbackVenca, parseJsonLoose, userMessage, type VencaOut } from './venca.ts';
-import { askClaude, DEFAULT_MODEL, type ClaudeIo } from './claude.ts';
+import { askClaude, DEFAULT_MODEL, spend, usdText, type ClaudeIo } from './claude.ts';
 import { draftId, issueBody, issueTitle, type Draft } from './draft.ts';
 import { ranniPivoHtml, SIZE } from './render/ranniPivo.ts';
 import { SAMPLE_DATE, SAMPLE_NIGHT, SAMPLE_VENCA } from './sample.ts';
@@ -92,6 +92,9 @@ async function askVenca(io: ClaudeIo, user: string, pozor: string[]): Promise<un
 /** Suché texty po selhání API: obecná poznámka „zkouška bez klíče“ by mátla, skutečný důvod už je v `pozor`. */
 const withoutKeyNote = <T extends { pozor: string[] }>(v: T): T => ({ ...v, pozor: v.pozor.filter((p) => !p.includes('zkouška bez klíče')) });
 
+/** Útrata běhu za Claude API do konceptu (chybí, když se AI nevolala nebo model není v ceníku). */
+const runCost = (): number | undefined => (spend.usd > 0 && spend.priced ? Math.round(spend.usd * 1e4) / 1e4 : undefined);
+
 const readDraft = (id: string): Draft => JSON.parse(readFileSync(join(OUT, `${id}.json`), 'utf8')) as Draft;
 const writeDraft = (d: Draft) => writeFileSync(join(OUT, `${d.id}.json`), JSON.stringify(d, null, 2));
 
@@ -142,7 +145,7 @@ async function make(): Promise<void> {
   const draft: Draft = {
     id, kind: 'ranni-pivo', date, dayLabel: label,
     caption: caption(venca, facts.hidden), venca, facts, pozor: venca.pozor, model,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(), costUsd: runCost(),
   };
 
   const html = ranniPivoHtml({ dayLabel: label, facts, venca });
@@ -382,7 +385,7 @@ async function liga(leagueId: LeagueId): Promise<void> {
   const draft: Draft = {
     id, kind: 'kotel', league: league.id, season, date: view.date, dayLabel: view.dayLabel,
     caption: kotelCaption(venca, sources), venca, facts, sources, pozor: [...pozor, ...venca.pozor],
-    model: io ? model : null, createdAt: new Date().toISOString(),
+    model: io ? model : null, createdAt: new Date().toISOString(), costUsd: runCost(),
   };
   const html = kotelHtml({ facts, venca, disclaimer: kotelDisclaimer(sources), label: league.label });
   writeFileSync(join(OUT, `${id}.html`), html);
@@ -468,7 +471,7 @@ async function special(): Promise<void> {
 
   const draft: Draft = {
     id, kind: 'special', stage, date: e.datum, dayLabel: dayLabel(e.datum), caption: specialCaption(venca, facts.sources),
-    venca, facts, pozor: [...pozor, ...venca.pozor], model: io ? model : null, createdAt: new Date().toISOString(),
+    venca, facts, pozor: [...pozor, ...venca.pozor], model: io ? model : null, createdAt: new Date().toISOString(), costUsd: runCost(),
   };
   const html = specialHtml({ facts, venca, disclaimer: specialDisclaimer(facts.sources) });
   writeFileSync(join(OUT, `${id}.html`), html);
@@ -545,7 +548,7 @@ async function prehled(): Promise<void> {
   const draft: Draft = {
     id: draftKey, kind: 'prehled', digest: cfg.id, date: p.to, dayLabel: facts.periodLabel,
     caption: digestCaption(venca, facts, MAX_ROWS), venca, facts, pozor: [...found.pozor, ...failed, ...venca.pozor],
-    model, createdAt: new Date().toISOString(),
+    model, createdAt: new Date().toISOString(), costUsd: runCost(),
   };
   const html = digestHtml({ facts, venca, disclaimer: digestDisclaimer(facts.sources) });
   writeFileSync(join(OUT, `${draftKey}.html`), html);
@@ -572,7 +575,15 @@ if (!run) {
   console.error(`Neznámý příkaz „${cmd}“. Příkazy: ${Object.keys(commands).join(', ')}.`);
   process.exit(2);
 }
-Promise.resolve(run()).catch((e: unknown) => {
+/** Na konci běhu: kolik stál za Claude API (i když selhal, kredit se utratil). */
+function reportSpend(): void {
+  if (spend.usd <= 0 && spend.priced) return;
+  console.log(`Cena běhu za Claude API: ${usdText(spend.usd)}${spend.priced ? '' : ', bez volání modelu mimo ceník'}.`);
+  output('cost_usd', spend.usd.toFixed(4));
+}
+
+Promise.resolve(run()).then(reportSpend, (e: unknown) => {
+  reportSpend();
   console.error(e instanceof Error ? e.message : String(e));
   process.exit(1);
 });

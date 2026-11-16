@@ -19,6 +19,8 @@ interface DraftBase {
   pozor: string[];
   model: string | null;
   createdAt: string;
+  /** Kolik výroba stála za Claude API v dolarech (hledání i texty); chybí, když se AI nevolala. */
+  costUsd?: number;
   /** Veřejná adresa obrázku po nahrání do úložiště. */
   imageUrl?: string;
 }

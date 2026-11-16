@@ -8,7 +8,8 @@ jedním komentářem.
 - **Extraligový kotel:** v sobotu ráno poslední kolo extraligy, střelci a špička tabulky (výsledky z TheSportsDB,
   střelci ze zpráv ČTK a dalších českých zdrojů, kontrolované proti skóre).
 - **Fotbalová 1. liga:** v pondělí poslední kolo, střelci a špička tabulky.
-- **Přehledy:** hokejoví legionáři a Češi ve fotbale v cizině (pondělí), tenis (denně); každý výkon ze dvou zdrojů.
+- **Přehledy:** hokejoví legionáři a Češi ve fotbale v cizině (pondělí); každý výkon ze dvou zdrojů. Tenis je zatím
+  vypnutý.
 - **Speciály k velkým akcím Čechů** (první: Jiří Procházka v UFC): odpoledne pozvánka, po zápase výsledek;
   každý údaj ověřený ve dvou nezávislých zdrojích.
 - Grafika 1080 × 1350, Venca v osmi výrazech podle výsledku.
