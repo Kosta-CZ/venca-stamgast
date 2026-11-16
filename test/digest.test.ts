@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  checkDigestVenca, confirmDigest, digestCaption, digestFacts, digestPrompt, digestRows, digestUserMessage, findDigest, isActive, parseDigest, period, periodLabel, scoreKey,
+  checkDigestVenca, conceded, confirmDigest, digestCaption, digestFacts, digestPrompt, digestRows, digestUserMessage, findDigest, isActive, parseDigest, period, periodLabel, scoreKey,
+  verifyPrompt,
   type DigestConfig, type DigestReport, type Performance,
 } from '../src/digest.ts';
 import { digestHtml, MAX_ROWS } from '../src/render/digest.ts';
@@ -14,7 +15,7 @@ const LEG = load('legionari');
 const TEN = load('tenis');
 const CIZ = load('cizina');
 
-const perf = (o: Partial<Performance>): Performance => ({ player: 'David Kämpf', team: 'Rögle', competition: 'SHL', stage: '', date: '2026-11-18', opponent: 'Frölunda', score: '4:2', won: true, goals: 1, assists: 1, ...o });
+const perf = (o: Partial<Performance>): Performance => ({ player: 'David Kämpf', team: 'Rögle', competition: 'SHL', stage: '', date: '2026-11-18', opponent: 'Frölunda', score: '4:2', won: true, goals: 1, assists: 1, cleanSheet: null, ...o });
 const rep = (items: Performance[], sources: string[] = [], note = ''): DigestReport => ({ items, sources, note });
 const P = { from: '2026-11-16', to: '2026-11-22' };
 
@@ -166,6 +167,52 @@ describe('přehledy: dvě nezávislá hledání', () => {
     expect(r.errors).toEqual([]);
     expect(r.facts.rows).toEqual([]);
     expect(logs.join(' ')).toContain('mezinárodní hledání vynechávám');
+  });
+});
+
+describe('přehledy: brankáři a čisté konto (Češi v cizině)', () => {
+  const gk = (o: Partial<Performance> = {}) => perf({ player: 'Antonín Kinský', team: 'Tottenham', competition: 'Premier League', opponent: 'Burnley', score: '2:0', won: true, goals: 0, assists: 0, cleanSheet: true, date: '2026-11-21', ...o });
+
+  it('JSON: nula jen jako true/false, jinak null', () => {
+    const r = parseDigest('{"vykony": [{"hrac": "Antonín Kinský", "tym": "Tottenham", "datum": "2026-11-21", "souper": "Burnley", "skore": "2:0", "vyhra": true, "goly": 0, "asistence": 0, "nula": true}, {"hrac": "Patrik Schick", "datum": "2026-11-22", "souper": "Bayern", "skore": "1:1", "goly": 1, "asistence": 0, "nula": "ano"}], "zdroje": []}');
+    expect(r.items.map((x) => x.cleanSheet)).toEqual([true, null]);
+    expect(conceded('2:0')).toBe(0);
+    expect(conceded('3:1 pp')).toBe(1);
+    expect(conceded('bez skóre')).toBeNull();
+  });
+
+  it('nula v obou zdrojích jde do grafiky jako „nula“, rozpor nebo nula se skóre, které nesedí, ne', () => {
+    const ok = confirmDigest(CIZ, rep([gk()]), rep([gk()]), P);
+    expect(ok.items).toHaveLength(1);
+    expect(digestRows('fotbal', ok.items)).toEqual([expect.objectContaining({ player: 'Antonín Kinský', value: 'nula' })]);
+
+    const differ = confirmDigest(CIZ, rep([gk({ cleanSheet: false })]), rep([gk()]), P);
+    expect(differ.items).toEqual([]);
+    expect(differ.pozor.join(' ')).toContain('čisté konto');
+
+    // Oba zdroje tvrdí nulu, ale skóre říká, že tým dostal gól: kód to nepustí (čísla dělá kód).
+    const wrong = confirmDigest(CIZ, rep([gk({ score: '2:1' })]), rep([gk({ score: '2:1' })]), P);
+    expect(wrong.items).toEqual([]);
+    expect(wrong.pozor.join(' ')).toContain('nesedí se skóre');
+  });
+
+  it('zápas bez gólu, asistence i nuly do přehledu nepatří; dvě nuly a nula s bodem', () => {
+    const empty = confirmDigest(CIZ, rep([]), rep([gk({ cleanSheet: false, score: '1:1' })]), P);
+    expect(empty.items).toEqual([]);
+    expect(empty.single).toBe(0);
+    expect(digestRows('fotbal', [gk(), gk({ date: '2026-11-18', opponent: 'Chelsea', score: '1:0' })])[0]!.value).toBe('2× nula');
+    expect(digestRows('fotbal', [gk({ assists: 1 })])[0]!.value).toBe('0+1 · nula');
+    // Nula váží jako gól: brankář s nulou je nad hráčem s asistencí.
+    const rows = digestRows('fotbal', [perf({ player: 'Vladimír Coufal', team: 'Hoffenheim', goals: 0, assists: 1 }), gk()]);
+    expect(rows.map((r) => r.player)).toEqual(['Antonín Kinský', 'Vladimír Coufal']);
+  });
+
+  it('ověření: u brankáře jen role, ne tvrzení o nule; seznam obsahuje brankáře z Premier League', () => {
+    const list = verifyPrompt(CIZ, P, CIZ.zdroje_a, [gk()]).split('Hledej jen')[0]!;
+    expect(list).toContain('- Antonín Kinský (Tottenham, brankář): Premier League, 2026-11-21, soupeř Burnley\n');
+    expect(list).not.toMatch(/nula|čist|2:0/);
+    expect(CIZ.hraci).toEqual(expect.arrayContaining(['Antonín Kinský (Tottenham, brankář)', 'Lukáš Horníček (Newcastle, brankář)']));
+    expect(digestPrompt(CIZ, P, CIZ.zdroje_b)).toContain('čisté konto');
   });
 });
 

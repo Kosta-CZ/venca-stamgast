@@ -1,15 +1,15 @@
 {
-  "_popis": "Přehled: čeští fotbalisté v zahraničních klubech za minulý týden (pondělí ráno). České zdroje (B) hledají po hráčích ze seznamu, mezinárodní (A) dostanou jen to, které zápasy ověřit, a čísla dohledají samy; do grafiky jde jen to, co sedí v obou. Seznam hráčů se udržuje ručně (přestupy v lednu a v létě), sestavený 16. 11. 2026 z nominací reprezentace a zpráv ČTK; brankáři v něm nejsou.",
+  "_popis": "Přehled: čeští fotbalisté v zahraničních klubech za minulý týden (pondělí ráno): góly, asistence a čistá konta brankářů. České zdroje (B) hledají po hráčích ze seznamu, mezinárodní (A) dostanou jen to, které zápasy ověřit, a čísla dohledají samy; do grafiky jde jen to, co sedí v obou. Seznam hráčů se udržuje ručně (přestupy v lednu a v létě), sestavený 16. 11. 2026 z nominací reprezentace a zpráv ČTK.",
   "id": "cizina",
   "nazev": "Češi v cizině",
   "sport": "fotbal",
   "obdobi_dni": 7,
-  "zadani": "Čeští fotbalisté v zahraničních klubech: zápasy jejich klubů v ligách a domácích pohárech a v evropských pohárech (Liga mistrů, Evropská liga, Konferenční liga). Ne česká 1. liga, ne české kluby a ne reprezentace.",
+  "zadani": "Čeští fotbalisté v zahraničních klubech: zápasy jejich klubů v ligách a domácích pohárech a v evropských pohárech (Liga mistrů, Evropská liga, Konferenční liga). U hráčů v poli góly a asistence, u brankářů čisté konto (celý zápas bez obdrženého gólu). Ne česká 1. liga, ne české kluby a ne reprezentace.",
   "vyloucit": ["Chance Liga", "Fortuna liga", "1. liga"],
-  "hraci": ["Patrik Schick (Bayer Leverkusen)", "Adam Hložek (Hoffenheim)", "Vladimír Coufal (Hoffenheim)", "Robin Hranáč (Hoffenheim)", "Pavel Šulc (Olympique Lyon)", "Tomáš Souček (West Ham)", "Ladislav Krejčí (Wolverhampton)", "Alex Král (FC Kodaň)", "Lukáš Ambros (Anderlecht)", "Ryan Naderi (Rangers)", "Kryštof Daněk (Linec)", "Pavel Bucha (Cincinnati)", "Ondřej Lingr (Korona Kielce)", "Michal Sáček (Górnik Zabrze)"],
+  "hraci": ["Patrik Schick (Bayer Leverkusen)", "Adam Hložek (Hoffenheim)", "Vladimír Coufal (Hoffenheim)", "Robin Hranáč (Hoffenheim)", "Pavel Šulc (Olympique Lyon)", "Tomáš Souček (West Ham)", "Ladislav Krejčí (Wolverhampton)", "Alex Král (FC Kodaň)", "Lukáš Ambros (Anderlecht)", "Ryan Naderi (Rangers)", "Kryštof Daněk (Linec)", "Pavel Bucha (Cincinnati)", "Ondřej Lingr (Korona Kielce)", "Michal Sáček (Górnik Zabrze)", "Antonín Kinský (Tottenham, brankář)", "Lukáš Horníček (Newcastle, brankář)", "Matěj Kovář (PSV Eindhoven, brankář)"],
   "zdroje_a": ["espn.com", "skysports.com", "uefa.com", "bundesliga.com", "premierleague.com"],
   "zdroje_b": ["isport.blesk.cz", "sport.cz", "ceskenoviny.cz", "sport.ceskatelevize.cz", "fotbal.cz"],
   "hashtagy": ["#fotbal", "#CesiVCizine", "#legionari"],
-  "hledani": 12,
+  "hledani": 14,
   "stranky": 6
 }

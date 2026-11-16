@@ -55,6 +55,8 @@ export interface Performance {
   won: boolean | null;
   goals: number | null;
   assists: number | null;
+  /** Brankář odchytal celý zápas a jeho tým nedostal gól (čisté konto, „nula“); u ostatních null. */
+  cleanSheet: boolean | null;
 }
 
 export interface DigestReport {
@@ -90,11 +92,12 @@ export const DIGEST_SYSTEM =
 function itemShape(sport: DigestSport): string {
   return sport === 'tenis'
     ? '{"hrac": "jméno Čecha/Češky", "turnaj": "název turnaje", "kolo": "kolo turnaje, např. 2. kolo, čtvrtfinále", "datum": "YYYY-MM-DD (den zápasu podle místa konání)", "souper": "jméno soupeře", "skore": "skóre po setech z pohledu Čecha, např. 6:4 3:6 7:6", "vyhra": true}'
-    : '{"hrac": "jméno Čecha", "tym": "jeho tým", "soutez": "liga nebo pohár", "datum": "YYYY-MM-DD (den zápasu podle místa konání)", "souper": "soupeř", "skore": "konečné skóre z pohledu Čechova týmu, např. 4:2", "vyhra": true, "goly": 1, "asistence": 0}';
+    : '{"hrac": "jméno Čecha", "tym": "jeho tým", "soutez": "liga nebo pohár", "datum": "YYYY-MM-DD (den zápasu podle místa konání)", "souper": "soupeř", "skore": "konečné skóre z pohledu Čechova týmu, např. 4:2", "vyhra": true, "goly": 1, "asistence": 0, "nula": false}';
 }
 
 const answerShape = (sport: DigestSport) => `Vrať jen tento JSON, bez textu okolo:
-{"vykony": [${itemShape(sport)}], "zdroje": ["adresy stránek, ze kterých údaje máš"], "poznamka": "jednou větou, jen když je něco nejisté; jinak prázdné"}
+{"vykony": [${itemShape(sport)}], "zdroje": ["adresy stránek, ze kterých údaje máš"], "poznamka": "jednou větou, jen když je něco nejisté; jinak prázdné"}${sport === 'tenis' ? '' : `
+"nula" je true jen u brankáře, který odchytal celý zápas a jeho tým nedostal gól; u všech ostatních false.`}
 Když nic nenajdeš, vrať {"vykony": [], "zdroje": [], "poznamka": "proč"}.`;
 
 /** Zadání prvního hledání (české zdroje): najít výkony v období, se seznamem hráčů po hráčích. */
@@ -102,7 +105,7 @@ export function digestPrompt(cfg: DigestConfig, p: { from: string; to: string },
   const tennis = cfg.sport === 'tenis';
   const what = tennis
     ? 'všechny zápasy českých tenistů a tenistek ve dvouhře (hlavní soutěž turnajů ATP a WTA včetně grandslamů)'
-    : `zápasy, ve kterých český ${cfg.sport === 'hokej' ? 'hokejista' : 'fotbalista'} dal gól nebo měl asistenci`;
+    : `zápasy, ve kterých český ${cfg.sport === 'hokej' ? 'hokejista' : 'fotbalista'} dal gól nebo měl asistenci, a zápasy, ve kterých český brankář odchytal celý zápas a jeho tým nedostal gól (čisté konto)`;
   // Hledání „všichni Češi za týden“ je moc široké a skončí na limitu; po hráčích to jde (jedno hledání na hráče).
   const players = cfg.hraci?.length
     ? `\nPostupuj po hráčích z tohoto seznamu, na každého stačí jedno hledání (jméno a klub; hráče ze stejného klubu hledej spolu): ${cfg.hraci.join('; ')}. Další Čechy přidej, jen když na ně při hledání narazíš.`
@@ -127,9 +130,11 @@ export function verifyPrompt(cfg: DigestConfig, p: { from: string; to: string },
   const list = candidates
     .map((c) => (tennis
       ? `- ${c.player}: ${[c.competition, c.stage].filter(Boolean).join(', ') || 'turnaj ?'}, ${c.date}, soupeř ${c.opponent || '?'}`
-      : `- ${c.player} (${c.team || 'klub ?'}): ${c.competition || 'soutěž ?'}, ${c.date}, soupeř ${c.opponent || '?'}`))
+      : `- ${c.player} (${[c.team || 'klub ?', c.cleanSheet ? 'brankář' : ''].filter(Boolean).join(', ')}): ${c.competition || 'soutěž ?'}, ${c.date}, soupeř ${c.opponent || '?'}`))
     .join('\n');
-  const numbers = tennis ? 'skóre po setech a kdo vyhrál' : 'konečné skóre, výsledek a kolik gólů a asistencí v něm hráč měl';
+  const numbers = tennis
+    ? 'skóre po setech a kdo vyhrál'
+    : 'konečné skóre, výsledek a kolik gólů a asistencí v něm hráč měl (u brankáře také, jestli odchytal celý zápas bez obdrženého gólu)';
   return `Ověř tyto zápasy (období ${p.from} až ${p.to}):
 ${list}
 
@@ -139,6 +144,16 @@ Jméno hráče a soupeře piš přesně tak, jak jsou v seznamu výše, i když 
 Nic nedopočítávej a nedoplňuj z paměti. Zápas, který ve zdrojích nenajdeš, vynech. Jiné zápasy nepřidávej.
 
 ${answerShape(cfg.sport)}`;
+}
+
+/** Výkon stojí za řádek: tenisový zápas vždy, jinak gól, asistence nebo čisté konto brankáře. */
+export const notable = (sport: DigestSport, p: Performance): boolean =>
+  sport === 'tenis' || (p.goals ?? 0) > 0 || (p.assists ?? 0) > 0 || p.cleanSheet === true;
+
+/** Kolik gólů dostal Čechův tým podle skóre „vlastní:soupeř“ (první dvojice čísel), nebo null. */
+export function conceded(score: string): number | null {
+  const m = /(\d+)\s*[:–-]\s*(\d+)/.exec(score);
+  return m ? Number(m[2]) : null;
 }
 
 /** Výkony, které do přehledu vůbec můžou: bez vyloučených soutěží (KHL) a v období (±1 den kvůli pásmům). */
@@ -170,6 +185,7 @@ export function parseDigest(text: string): DigestReport {
       won: typeof r.vyhra === 'boolean' ? r.vyhra : null,
       goals: int(r.goly),
       assists: int(r.asistence),
+      cleanSheet: typeof r.nula === 'boolean' ? r.nula : null,
     };
   }).filter((p) => p.player && /^\d{4}-\d{2}-\d{2}$/.test(p.date));
   const sources = (Array.isArray(o.zdroje) ? o.zdroje : []).filter((u): u is string => typeof u === 'string' && /^https?:\/\//.test(u.trim())).map((u) => u.trim());
@@ -206,7 +222,8 @@ const perfLabel = (p: Performance) => `${p.player} (${p.date}, ${p.opponent} ${p
  */
 export function confirmDigest(cfg: Pick<DigestConfig, 'vyloucit' | 'sport'>, a: DigestReport, b: DigestReport, p: { from: string; to: string }): ConfirmedDigest {
   const pozor: string[] = [];
-  const [la, lb] = [usableItems(cfg, a.items, p), usableItems(cfg, b.items, p)];
+  // B (české zdroje) dodává kandidáty: zápas bez gólu, asistence i nuly do přehledu nepatří.
+  const [la, lb] = [usableItems(cfg, a.items, p), usableItems(cfg, b.items, p).filter((x) => notable(cfg.sport, x))];
   const used = new Set<Performance>();
   const items: Performance[] = [];
   let single = 0;
@@ -223,9 +240,14 @@ export function confirmDigest(cfg: Pick<DigestConfig, 'vyloucit' | 'sport'>, a: 
     if (cfg.sport !== 'tenis') {
       if ((x.goals ?? 0) !== (y.goals ?? 0)) diffs.push(`góly ${x.goals ?? 0} × ${y.goals ?? 0}`);
       if ((x.assists ?? 0) !== (y.assists ?? 0)) diffs.push(`asistence ${x.assists ?? 0} × ${y.assists ?? 0}`);
+      if ((x.cleanSheet ?? false) !== (y.cleanSheet ?? false)) diffs.push('čisté konto');
     }
     if (diffs.length) {
       pozor.push(`${perfLabel(x)}: zdroje se liší (${diffs.join(', ')}), do grafiky nejde.`);
+      continue;
+    }
+    if (x.cleanSheet && conceded(x.score) !== 0) {
+      pozor.push(`${perfLabel(x)}: čisté konto nesedí se skóre, do grafiky nejde.`);
       continue;
     }
     items.push({ ...x, won: x.won ?? y.won, team: x.team || y.team, stage: x.stage || y.stage });
@@ -292,13 +314,16 @@ export function digestRows(sport: DigestSport, items: readonly Performance[]): D
   return [...by.values()].map((list) => {
     const goals = list.reduce((n, p) => n + (p.goals ?? 0), 0);
     const assists = list.reduce((n, p) => n + (p.assists ?? 0), 0);
+    const clean = list.filter((p) => p.cleanSheet === true).length;
     const first = list[0]!;
+    const nula = clean === 0 ? '' : clean === 1 ? 'nula' : `${clean}× nula`;
     return {
       player: first.player,
       where: [first.team, first.competition].filter(Boolean).join(', '),
       detail: list.map((p) => `${p.opponent} ${p.score}`).join(' · '),
-      value: `${goals}+${assists}`,
-      weight: goals * 3 + assists * 2,
+      // Brankář s čistým kontem: „nula“; když by měl i bod, obojí.
+      value: goals + assists === 0 && nula ? nula : nula ? `${goals}+${assists} · ${nula}` : `${goals}+${assists}`,
+      weight: goals * 3 + assists * 2 + clean * 3,
     };
   }).sort((a, b) => b.weight - a.weight || a.player.localeCompare(b.player, 'cs'));
 }
@@ -342,7 +367,7 @@ export async function findDigest(io: ClaudeIo, cfg: DigestConfig, today: string,
   const p = period(cfg, today);
   const limits = { searches: cfg.hledani ?? 10, fetches: cfg.stranky ?? 8 };
   const b = await searchGroup(io, 'B', digestPrompt(cfg, p, cfg.zdroje_b), cfg.zdroje_b, limits, log);
-  const candidates = b.error ? [] : usableItems(cfg, b.report.items, p);
+  const candidates = b.error ? [] : usableItems(cfg, b.report.items, p).filter((x) => notable(cfg.sport, x));
   let a: GroupResult = { report: { ...EMPTY }, seen: [] };
   if (!candidates.length) {
     log('[A] České zdroje nic nenašly, mezinárodní hledání vynechávám (bez dvou zdrojů se nic nepotvrdí).');
@@ -389,6 +414,7 @@ export function digestUserMessage(f: DigestFacts): string {
       skore: p.score,
       vysledek: p.won === null ? 'neuvedeno' : p.won ? 'výhra' : 'prohra',
       ...(f.sport !== 'tenis' ? { goly: p.goals ?? 0, asistence: p.assists ?? 0 } : {}),
+      ...(p.cleanSheet ? { ciste_konto: true } : {}),
     })),
     hraci_v_grafice: f.rows.map((r) => ({ hrac: r.player, kde: r.where, hodnota: r.value })),
   };
