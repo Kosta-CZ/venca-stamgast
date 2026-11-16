@@ -47,6 +47,9 @@ npm run venca -- make --demo                # ukázka z 9. 11. bez sítě (out/)
 npm run venca -- make --date 2026-11-17     # skutečná noc (potřebuje síť, bez klíče suché texty)
 npm run venca -- upload --id 2026-11-17-ranni-pivo
 npm run venca -- publish --id 2026-11-17-ranni-pivo --dry-run
+npm run venca -- kotel --demo                       # ukázka Kotle z 19. kola bez sítě
+npm run venca -- kotel --round 19 --no-ai           # kolo z TheSportsDB (bez R2 ukládá kola do out/kola)
+npm run venca -- special --stage pozvanka --event 2026-11-21-prochazka --no-ai
 npm test
 ```
 
