@@ -89,6 +89,9 @@ async function askVenca(io: ClaudeIo, user: string, pozor: string[]): Promise<un
   }
 }
 
+/** Suché texty po selhání API: obecná poznámka „zkouška bez klíče“ by mátla, skutečný důvod už je v `pozor`. */
+const withoutKeyNote = <T extends { pozor: string[] }>(v: T): T => ({ ...v, pozor: v.pozor.filter((p) => !p.includes('zkouška bez klíče')) });
+
 const readDraft = (id: string): Draft => JSON.parse(readFileSync(join(OUT, `${id}.json`), 'utf8')) as Draft;
 const writeDraft = (d: Draft) => writeFileSync(join(OUT, `${d.id}.json`), JSON.stringify(d, null, 2));
 
@@ -123,7 +126,7 @@ async function make(): Promise<void> {
     const failed: string[] = [];
     const raw = await askVenca({ fetch, apiKey, model }, userMessage(night, date), failed);
     if (raw === null) {
-      venca = fallbackVenca(night);
+      venca = withoutKeyNote(fallbackVenca(night));
       model = null;
     } else {
       venca = checkVenca(raw, night, date);
@@ -373,7 +376,7 @@ async function liga(leagueId: LeagueId): Promise<void> {
 
   const facts: KotelFacts = { round: view.round, dayLabel: view.dayLabel, games, table: tableAsOf(rounds.values(), view.date, teams, league.points) };
   const raw = io ? await askVenca(io, kotelUserMessage(facts, view.date, league), pozor) : null;
-  const venca: KotelVencaOut = raw === null ? fallbackKotelVenca(facts, league) : checkKotelVenca(raw, facts, view.date);
+  const venca: KotelVencaOut = raw !== null ? checkKotelVenca(raw, facts, view.date) : io ? withoutKeyNote(fallbackKotelVenca(facts, league)) : fallbackKotelVenca(facts, league);
   if (venca.muz_kola) facts.hero = venca.muz_kola;
 
   const draft: Draft = {
@@ -461,7 +464,7 @@ async function special(): Promise<void> {
   }
 
   const raw = io ? await askVenca(io, specialUserMessage(facts), pozor) : null;
-  const venca: SpecialVencaOut = raw === null ? fallbackSpecialVenca(facts, e.hashtagy) : checkSpecialVenca(raw, facts, e.hashtagy);
+  const venca: SpecialVencaOut = raw !== null ? checkSpecialVenca(raw, facts, e.hashtagy) : io ? withoutKeyNote(fallbackSpecialVenca(facts, e.hashtagy)) : fallbackSpecialVenca(facts, e.hashtagy);
 
   const draft: Draft = {
     id, kind: 'special', stage, date: e.datum, dayLabel: dayLabel(e.datum), caption: specialCaption(venca, facts.sources),
@@ -537,7 +540,7 @@ async function prehled(): Promise<void> {
 
   const failed: string[] = [];
   const raw = await askVenca(io, digestUserMessage(facts), failed);
-  const venca = raw === null ? fallbackDigestVenca(facts, cfg.hashtagy) : checkDigestVenca(raw, facts, cfg.hashtagy);
+  const venca = raw === null ? withoutKeyNote(fallbackDigestVenca(facts, cfg.hashtagy)) : checkDigestVenca(raw, facts, cfg.hashtagy);
   if (venca.hrdina) facts.hero = venca.hrdina;
   const draft: Draft = {
     id: draftKey, kind: 'prehled', digest: cfg.id, date: p.to, dayLabel: facts.periodLabel,
