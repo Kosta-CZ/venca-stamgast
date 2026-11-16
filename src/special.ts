@@ -264,7 +264,8 @@ export function confirmResult(e: SpecialEvent, a: ResultReport, b: ResultReport,
   const time = agree('Čas', a.time, b.time, (x, y) => x.replace(/^0/, '') === y.replace(/^0/, ''), (x) => x, pozor);
   if (time && !/^\d{1,2}:\d{2}$/.test(time)) pozor.push(`Čas „${time}“ není ve tvaru m:ss.`);
 
-  const winnerName = winner ? (samePerson(winner, e.cech) ? e.cech : samePerson(winner, e.souper) ? e.souper : winner) : null;
+  const oppName = invite?.opponent.name ?? e.souper;
+  const winnerName = winner ? (samePerson(winner, e.cech) ? e.cech : samePerson(winner, oppName) || samePerson(winner, e.souper) ? oppName : winner) : null;
   const rows = [
     ...(method ? [{ label: 'Způsob', value: method }] : []),
     ...(round ? [{ label: 'Kolo', value: `${round}.` }] : []),
@@ -274,7 +275,7 @@ export function confirmResult(e: SpecialEvent, a: ResultReport, b: ResultReport,
     facts: {
       ...base(e, 'vysledek'),
       czech: { name: e.cech, record: invite?.czech.record ?? null },
-      opponent: { name: invite?.opponent.name ?? e.souper, record: invite?.opponent.record ?? null },
+      opponent: { name: oppName, record: invite?.opponent.record ?? null },
       rows, winner: winnerName, sources,
     },
     pozor,

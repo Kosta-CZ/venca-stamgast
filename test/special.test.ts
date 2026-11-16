@@ -85,6 +85,12 @@ describe('speciál: dva nezávislé zdroje', () => {
     expect(r.facts.czech.record).toBe('32-6-1');
   });
 
+  it('výsledek: vítěz soupeř dostane jméno z grafiky (štítek VÍTĚZ u něj)', () => {
+    const r = confirmResult(EVENT, { ...resultA, winner: 'Stirling' }, { ...resultB, winner: 'N. Stirling' }, [], { czech: { name: 'Jiří Procházka', record: null }, opponent: { name: 'Navajo Stirling', record: '11-0-0' } })!;
+    expect(r.facts.winner).toBe('Navajo Stirling');
+    expect(specialHtml({ facts: r.facts, venca: { titulek: 'T', hlaska: 'H', vyraz: 'zklamani' }, disclaimer: 'D' })).toMatch(/VÍTĚZ<\/div>\s*<div[^>]*>Navajo/);
+  });
+
   it('výsledek: jiné kolo nebo vítěz jde do pozor, nedohraný zápas dá null', () => {
     const r = confirmResult(EVENT, resultA, { ...resultB, round: 3, winner: 'Navajo Stirling' }, [])!;
     expect(r.pozor.join('\n')).toContain('Kolo: zdroje se liší (2 × 3)');
