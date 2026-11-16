@@ -119,7 +119,7 @@ Bez nového nastavení (Claude API, R2, Telegram jako u ostatních).
 - **1. liga:** Actions → **Fotbalová liga**. V pondělí 7:53 (když se kolo ještě dohrává, zkusí to v úterý 7:53).
   Kolo starší než 3 dny (po reprezentační pauze) se neposílá, v pondělí přijde jen krátká zpráva.
   V příspěvcích se soutěž píše „1. liga“: oficiální název nese jméno sázkové kanceláře. Týmy: `data/fotbal-tymy.json`.
-- **Přehledy:** Actions → **Přehledy**. Češi ve fotbale v cizině v pondělí v 11:23 (minulý týden). České zdroje
+- **Přehledy:** Actions → **Přehledy**. Češi ve fotbale v cizině v pondělí v 11:23 (minulý týden): góly, asistence a čistá konta brankářů. České zdroje
   hledají po hráčích ze seznamu v `data/prehledy/cizina.json` (po přestupech ho uprav), mezinárodní zdroje pak
   ověří nalezené zápasy; do grafiky jde jen to, co sedí v obou.
   Vypnuté: tenis (kvůli ceně) a hokejoví legionáři (česká média o nich zápas po zápasu nepíšou). Ručně jdou spustit,

@@ -105,7 +105,8 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
 - **1. liga** (`fotbal.yml`): pondělí 7:53 (čeká, až se kolo dohraje), záloha v úterý; kolo starší než 3 dny
   (po reprezentační pauze) se neposílá. TheSportsDB liga 4631, kola v R2 `liga/<sezóna>/`, id `<den>-liga`.
   Tabulka po 14. kole sedí s ČTK (test). Nadstavba po 30. kole (skupiny) zatím počítaná není.
-- **Přehledy** (`prehledy.yml`): Češi ve fotbale v cizině v pondělí 11:23. Volná strukturovaná data nejsou:
+- **Přehledy** (`prehledy.yml`): Češi ve fotbale v cizině v pondělí 11:23: góly a asistence, u brankářů čisté konto
+  (v grafice „nula“; zdroje ho musí potvrdit oba a kód ho zkontroluje se skóre). Volná strukturovaná data nejsou:
   české zdroje (B) hledají po hráčích ze seznamu `hraci` v `data/prehledy/cizina.json` (udržuje se ručně, přestupy
   v lednu a v létě), mezinárodní (A) dostanou jen to, které zápasy ověřit (hráč, tým, soutěž, den, soupeř) a čísla
   (skóre, výsledek, góly, asistence) dohledají samy. Do grafiky jde jen to, co sedí v obou. Když B nic nenajde,
@@ -119,8 +120,9 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
 - Log každého běhu ukazuje tokeny a cenu, koncept ji nese v `costUsd` a zpráva ke schválení ji ukáže („💰“).
 - Hledání posílá `cache_control` (opakované čtení nalezeného za 5 % ceny) a střelci se berou ze souhrnu kola ČTK
   (strop 8 hledání a 8 stránek). Kolo ligy asi 4,4 Kč, Kotel 3,4 Kč (hledání střelců $0.12–0.17, texty ~$0.03),
-  Ranní pivo pod 1 Kč, Češi v cizině asi 19 Kč týdně (hledání po hráčích $0.76, ověření $0.09; zkouška 2.–8. 11.
-  potvrdila Schickův gól v Kolíně), prázdný týden méně. Výsledek speciálu: nejdřív mezinárodní zdroje, české jen když
+  Ranní pivo pod 1 Kč, Češi v cizině 16–19 Kč týdně (hledání po hráčích ~$0.7, ověření ~$0.1), prázdný týden méně.
+  Zkoušky: 2.–8. 11. Schickův gól v Kolíně; 19.–25. 10. Kinského nula proti Chelsea, góly Hložka a Daňka. Zadání hledání
+  nese dnešní datum (bez něj Claude usoudil, že týden „ještě nenastal“). Výsledek speciálu: nejdřív mezinárodní zdroje, české jen když
   výsledek už mají.
 - Hledání „všichni Češi za týden“ bylo moc široké a nic nenašlo; proto seznam hráčů a ověřování konkrétních zápasů.
 
