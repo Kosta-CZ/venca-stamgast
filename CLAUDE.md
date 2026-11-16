@@ -101,9 +101,9 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
 
 ### Fotbalová 1. liga a přehledy (od 16. 11. 2026)
 
-- **1. liga** (`fotbal.yml`): pondělí 7:53 (čeká, až se kolo dohraje), záloha v úterý. TheSportsDB liga 4631,
-  kola v R2 `liga/<sezóna>/`, id `<den>-liga`. Tabulka po 14. kole sedí s ČTK (test). Nadstavba po 30. kole
-  (skupiny) zatím počítaná není.
+- **1. liga** (`fotbal.yml`): pondělí 7:53 (čeká, až se kolo dohraje), záloha v úterý; kolo starší než 3 dny
+  (po reprezentační pauze) se neposílá. TheSportsDB liga 4631, kola v R2 `liga/<sezóna>/`, id `<den>-liga`.
+  Tabulka po 14. kole sedí s ČTK (test). Nadstavba po 30. kole (skupiny) zatím počítaná není.
 - **Přehledy** (`prehledy.yml`): tenis denně 9:23 (v `data/prehledy/tenis.json` je období do konce Australian
   Open), legionáři (SHL, Liiga, DEL, National League, ICEHL, AHL; **KHL nikdy**) a Češi v cizině v pondělí.
   Volná strukturovaná data k nim nejsou: výkony dohledá Claude dvakrát nezávisle (zdroje A mezinárodní,

@@ -3,8 +3,9 @@
 //   make     [--date YYYY-MM-DD] [--demo] [--no-ai]   vyrobí koncept Ranního piva do out/
 //   kotel    [--round N] [--date YYYY-MM-DD] [--no-ai] [--early] [--skip-existing] [--demo]
 //                                                       vyrobí koncept Extraligového kotle (poslední odehrané kolo)
-//   liga     --liga extraliga|fotbal [stejné volby jako kotel, navíc --whole-round]
-//                                                       kolo ligy; --whole-round počká, dokud se kolo nedohraje
+//   liga     --liga extraliga|fotbal [stejné volby jako kotel, navíc --whole-round a --max-age DNY]
+//                                                       kolo ligy; --whole-round počká, dokud se kolo nedohraje,
+//                                                       --max-age neposílá kolo starší než DNY
 //   prehled  --id legionari|cizina|tenis [--date YYYY-MM-DD] [--skip-existing]
 //                                                       přehled ze dvou zdrojů (data/prehledy)
 //   special  --stage pozvanka|vysledek [--event SOUBOR] [--date YYYY-MM-DD] [--no-ai] [--skip-existing]
@@ -321,6 +322,16 @@ async function liga(leagueId: LeagueId): Promise<void> {
   const id = `${view.date}-${league.key}`;
   output('round', String(view.round));
   console.log(`Kolo ${view.round} (${view.dayLabel}): zápasů ${view.games.length}, bez výsledku ${view.missing.length}.`);
+
+  // Plánovaný běh neposílá staré kolo (třeba po reprezentační pauze, kdy se poslední kolo hrálo před týdnem).
+  const maxAge = arg('max-age') === undefined ? undefined : Number(arg('max-age'));
+  const age = Math.round((Date.parse(today) - Date.parse(view.date)) / 86_400_000);
+  if (!want && maxAge !== undefined && age > maxAge) {
+    console.log(`Poslední odehrané kolo skončilo před ${age} dny (víc než ${maxAge}): staré kolo neposílám.`);
+    output('has_post', 'false');
+    output('reason', 'old');
+    return;
+  }
 
   if (flag('skip-existing') && (await store.get(`drafts/${id}.json`))) {
     console.log(`Koncept ${id} už existuje (nové kolo zatím není), nic nevyrábím.`);

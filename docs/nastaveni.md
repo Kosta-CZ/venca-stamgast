@@ -117,6 +117,7 @@ a dvě skupiny zdrojů) a v `.github/workflows/specialy.yml` dostane řádky `cr
 Bez nového nastavení (Claude API, R2, Telegram jako u ostatních).
 
 - **1. liga:** Actions → **Fotbalová liga**. V pondělí 7:53 (když se kolo ještě dohrává, zkusí to v úterý 7:53).
+  Kolo starší než 3 dny (po reprezentační pauze) se neposílá, v pondělí přijde jen krátká zpráva.
   V příspěvcích se soutěž píše „1. liga“: oficiální název nese jméno sázkové kanceláře. Týmy: `data/fotbal-tymy.json`.
 - **Přehledy:** Actions → **Přehledy**. Tenis denně v 9:23 (včerejší zápasy, období v `data/prehledy/tenis.json`),
   legionáři v pondělí v 10:23 a Češi v cizině v pondělí v 11:23 (minulý týden). Každý výkon musí sedět ve dvou

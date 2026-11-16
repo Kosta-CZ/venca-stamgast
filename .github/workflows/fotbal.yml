@@ -75,7 +75,8 @@ jobs:
         run: |
           args=()
           [ -n "$ROUND" ] && args+=(--round "$ROUND")
-          [ "$SCHEDULED" = true ] && args+=(--skip-existing)
+          # Plánovaný běh: jen kolo, které skončilo nejvýš před 3 dny (po pauze se staré kolo neposílá).
+          [ "$SCHEDULED" = true ] && args+=(--skip-existing --max-age 3)
           [ "$EARLY" = true ] && args+=(--early --whole-round)
           npm run -s venca -- liga --liga fotbal "${args[@]}"
 
@@ -118,7 +119,7 @@ jobs:
           gh issue create --title "$title" --label ke-schvaleni --body-file "$RUNNER_TEMP/body.md" --assignee "${{ github.repository_owner }}"
 
       - name: Tento týden bez nového kola
-        if: steps.make.outputs.reason == 'exists' && github.event.schedule == '53 6 * * 1'
+        if: (steps.make.outputs.reason == 'exists' || steps.make.outputs.reason == 'old') && github.event.schedule == '53 6 * * 1'
         env:
           ROUND: ${{ steps.make.outputs.round }}
         run: |
