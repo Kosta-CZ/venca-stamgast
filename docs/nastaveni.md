@@ -55,8 +55,13 @@ Od té chvíle úloha běží každé ráno v 6:10 UTC (7:10 v zimě, 8:10 v lé
 
 ## Token
 
-Token Instagramu platí 60 dní a ranní úloha ho prodlužuje. Když Instagram vydá nový a chybí
-`SOCIAL_ADMIN_TOKEN`, založí úloha issue a token je potřeba uložit ručně. Postup vystavení je stejný jako v kroku 1.
+- **Token Facebooku (začíná `EAA`, Unified login):** nevyprší, ranní úloha jen ověří, že platí.
+  `SOCIAL_ADMIN_TOKEN` není potřeba.
+- **Token Instagramu (začíná `IG`):** platí 60 dní a ranní úloha ho prodlužuje. Když Instagram vydá nový
+  a chybí `SOCIAL_ADMIN_TOKEN`, založí úloha issue a token je potřeba uložit ručně.
+
+V obou případech úloha založí issue „Token Instagramu je potřeba obnovit“, když token přestane platit
+(změna hesla, odebraný přístup aplikace). Nový se vystaví stejně jako v kroku 1.
 
 ## Když se něco pokazí
 

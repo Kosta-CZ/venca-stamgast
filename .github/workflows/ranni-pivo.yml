@@ -150,12 +150,15 @@ jobs:
           fi
           rm -f "$RUNNER_TEMP/ig-token"
 
+      # Ozve se, když token neplatí (změna hesla, odebraný přístup aplikace), brzy vyprší,
+      # nebo když Instagram vydal nový a úloha ho nemá kam uložit.
       - name: Upozornění majiteli
-        if: steps.store.outputs.manual == 'true' || (steps.refresh.outputs.days != '' && steps.refresh.outputs.days < 10)
+        if: steps.refresh.outcome == 'failure' || steps.store.outputs.manual == 'true' || (steps.refresh.outputs.days != '' && steps.refresh.outputs.days < 10)
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           title="Token Instagramu je potřeba obnovit"
           gh issue list --state open --json title --jq '.[].title' | grep -Fxq "$title" && exit 0
-          gh issue create --title "$title" --body "Token pro @venca_stamgast brzy vyprší nebo Instagram vydal nový a úloha ho nemá kam uložit. Postup je v docs/nastaveni.md, část Token. @${{ github.repository_owner }}"
+          gh issue create --title "$title" --body "Token pro @venca_stamgast přestal platit, brzy vyprší, nebo Instagram vydal nový a úloha ho nemá kam uložit. Vystav nový token a ulož ho do tajemství IG_ACCESS_TOKEN (postup je v docs/nastaveni.md, část Token). Běh úlohy: $RUN_URL @${{ github.repository_owner }}"
