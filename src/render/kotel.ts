@@ -1,4 +1,4 @@
-// Šablona Extraligového kotle (styl v2): kolo extraligy s výsledky a střelci, špička tabulky a Venca.
+// Šablona kola ligy (styl v2): Extraligový kotel i fotbalová 1. liga. Výsledky a střelci, špička tabulky a Venca.
 // Čistá funkce: fakta + Vencovy texty → HTML 1080 × 1350.
 
 import { played, shortDate, SUFFIX, type KotelFacts, type KotelGame, type KotelScorer } from '../kotel.ts';
@@ -19,6 +19,8 @@ export interface KotelInput {
   venca: Pick<VencaOut, 'titulek' | 'hlaska' | 'vyraz'>;
   /** Patička se zdroji (výchozí: ČTK). */
   disclaimer?: string;
+  /** Štítek soutěže v hlavičce (výchozí: Extraligový kotel). */
+  label?: string;
 }
 
 type Hero = KotelFacts['hero'];
@@ -48,7 +50,7 @@ function gameRow(g: KotelGame, hero: Hero): string {
 </div>`;
 }
 
-export function kotelHtml({ facts, venca, disclaimer = KOTEL_DISCLAIMER }: KotelInput): string {
+export function kotelHtml({ facts, venca, disclaimer = KOTEL_DISCLAIMER, label = 'EXTRALIGOVÝ KOTEL' }: KotelInput): string {
   const hero = facts.hero;
   const tiles = facts.table.slice(0, 4).map((r) => `
 <div style="background:${CARD};border-radius:14px;padding:14px 18px;display:flex;flex-direction:column;gap:4px;min-width:0">
@@ -60,7 +62,7 @@ export function kotelHtml({ facts, venca, disclaimer = KOTEL_DISCLAIMER }: Kotel
 <html lang="cs">
 <head>
 <meta charset="utf-8">
-<title>Extraligový kotel ${facts.round}. kolo</title>
+<title>${esc(label)} ${facts.round}. kolo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -84,7 +86,7 @@ html,body{margin:0;background:${BG}}
       <div style="background:${ACC};color:${BG};font-weight:900;${COND}font-size:34px;letter-spacing:1px;padding:6px 16px;border-radius:8px">ŠTAMGAST</div>
       <div style="${MONO}font-size:20px;color:${MUTED};letter-spacing:2px">SPORT OD STOLU</div>
     </div>
-    <div style="${MONO}font-size:22px;letter-spacing:2px;border:2px solid #2C5A47;padding:8px 14px;border-radius:8px">EXTRALIGOVÝ KOTEL · <span style="color:${ACC}">${facts.round}. KOLO</span></div>
+    <div style="${MONO}font-size:22px;letter-spacing:2px;border:2px solid #2C5A47;padding:8px 14px;border-radius:8px">${esc(label)} · <span style="color:${ACC}">${facts.round}. KOLO</span></div>
   </div>
 
   <div style="position:relative;display:flex;flex-direction:column;gap:8px">

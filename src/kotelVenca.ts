@@ -1,12 +1,13 @@
-// Venca a Extraligový kotel: data pro Claude API (formát `kotel` v prompts/system.md) a kontrola
-// jeho textů. Výsledky, střelce a tabulku dosazuje do grafiky kód; Venca dodá titulek, hlášku,
-// popisek, výraz a muže kola, kterého vybírá jen z hráčů, kteří v kole skórovali.
+// Venca a kolo ligy (Extraligový kotel = formát `kotel`, fotbalová 1. liga = formát `liga` v prompts/system.md):
+// data pro Claude API a kontrola jeho textů. Výsledky, střelce a tabulku dosazuje do grafiky kód; Venca dodá
+// titulek, hlášku, popisek, výraz a muže kola, kterého vybírá jen z hráčů, kteří v kole skórovali.
 
 import { numbersIn } from './facts.ts';
 import { ascii } from './nhl.ts';
 import { defaultHero, played, roundScorers, scoreText, shortDate, type KotelFacts } from './kotel.ts';
+import { LEAGUES, type League } from './leagues.ts';
 import { sourceLabel, type Source } from './scorers.ts';
-import { checkExpression, cleanHashtags, LIMITS, str, vencaNotes, words, type Expression } from './venca.ts';
+import { checkExpression, cleanHashtags, LIMITS, sponsorNotes, str, vencaNotes, words, type Expression } from './venca.ts';
 
 export interface KotelVencaOut {
   muz_kola: { name: string; team: string } | null;
@@ -21,8 +22,10 @@ export interface KotelVencaOut {
 const ENDING_TEXT = { reg: 'v základní době', ot: 'po prodloužení', so: 'po nájezdech' } as const;
 
 /** Data pro Vencu: to, co je v grafice, česky pojmenované. */
-export function kotelVencaData(facts: KotelFacts): Record<string, unknown> {
+export function kotelVencaData(facts: KotelFacts, league: League = LEAGUES.extraliga): Record<string, unknown> {
+  const hockey = league.sport === 'hokej';
   return {
+    soutez: hockey ? 'hokejová extraliga' : 'fotbalová 1. liga',
     kolo: facts.round,
     dny_kola: facts.dayLabel,
     zapasy: facts.games.map((g) =>
@@ -31,7 +34,7 @@ export function kotelVencaData(facts: KotelFacts): Record<string, unknown> {
             domaci: g.home,
             hoste: g.away,
             skore: scoreText(g),
-            konec: ENDING_TEXT[g.ending],
+            ...(hockey ? { konec: ENDING_TEXT[g.ending] } : {}),
             strelci_domaci: g.homeScorers.map((s) => ({ jmeno: s.name, goly: s.goals })),
             strelci_hoste: g.awayScorers.map((s) => ({ jmeno: s.name, goly: s.goals })),
             ...(g.shootoutWinner ? { rozhodujici_najezd: g.shootoutWinner } : {}),
@@ -44,8 +47,8 @@ export function kotelVencaData(facts: KotelFacts): Record<string, unknown> {
   };
 }
 
-export function kotelUserMessage(facts: KotelFacts, date: string): string {
-  return `FORMÁT: kotel\nDATUM: ${date}\nDATA:\n${JSON.stringify(kotelVencaData(facts), null, 2)}`;
+export function kotelUserMessage(facts: KotelFacts, date: string, league: League = LEAGUES.extraliga): string {
+  return `FORMÁT: ${league.vencaFormat}\nDATUM: ${date}\nDATA:\n${JSON.stringify(kotelVencaData(facts, league), null, 2)}`;
 }
 
 /**
@@ -128,18 +131,20 @@ export function checkKotelVenca(raw: unknown, facts: KotelFacts, date: string): 
     const bad = numbersIn(text).filter((n) => !allowed.has(n.replace(/^0+(?=\d)/, '')));
     if (bad.length) pozor.push(`Čísla v ${label} nejsou v datech: ${[...new Set(bad)].join(', ')}.`);
   }
+  pozor.push(...sponsorNotes({ titulku: titulek, hlášce: hlaska, popisku: popisek }));
 
   return { muz_kola: hero, titulek, hlaska, popisek, hashtagy: cleanHashtags(o.hashtagy), vyraz, pozor };
 }
 
 /** Texty bez AI (zkouška bez klíče): suché, ale z dat. */
-export function fallbackKotelVenca(facts: KotelFacts): KotelVencaOut {
+export function fallbackKotelVenca(facts: KotelFacts, league: League = LEAGUES.extraliga): KotelVencaOut {
+  const name = league.sport === 'hokej' ? 'extraliga' : '1. liga';
   return {
     muz_kola: defaultHero(facts.games) ?? null,
-    titulek: `Extraliga po ${facts.round}. kole`,
+    titulek: `${name === 'extraliga' ? 'Extraliga' : '1. liga'} po ${facts.round}. kole`,
     hlaska: 'Dneska bez komentáře, Venca si dal volno. Výsledky ale sedí.',
-    popisek: `Výsledky ${facts.round}. kola extraligy a špička tabulky. Kdo vás tenhle týden potěšil?`,
-    hashtagy: ['#extraliga', '#hokej', '#ExtraligovyKotel'],
+    popisek: `Výsledky ${facts.round}. kola (${name}) a špička tabulky. Kdo vás tohle kolo potěšil?`,
+    hashtagy: league.hashtags,
     vyraz: 'klid',
     pozor: ['Texty jsou bez AI (zkouška bez klíče ANTHROPIC_API_KEY).'],
   };

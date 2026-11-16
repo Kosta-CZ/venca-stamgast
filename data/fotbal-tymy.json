@@ -1,0 +1,21 @@
+{
+  "_popis": "Převod názvů týmů fotbalové 1. ligy z TheSportsDB do češtiny. Hledá se podle id týmu v TheSportsDB, pak podle názvu bez diakritiky (název i aliasy). Pozor na dva týmy z Brna: alias „Brno“ nepoužívat. Nový tým (postupující) stačí připsat; neznámý tým koncept ohlásí v „pozor“.",
+  "tymy": [
+    { "id": "136036", "nazev": "Slavia", "aliasy": ["Slavia Prague", "Slavia Praha", "SK Slavia Praha"] },
+    { "id": "134007", "nazev": "Sparta", "aliasy": ["Sparta Prague", "Sparta Praha", "AC Sparta Praha"] },
+    { "id": "134015", "nazev": "Plzeň", "aliasy": ["Viktoria Plzeň", "FC Viktoria Plzeň"] },
+    { "id": "136684", "nazev": "Ostrava", "aliasy": ["Baník Ostrava", "FC Baník Ostrava", "Baník"] },
+    { "id": "133954", "nazev": "Liberec", "aliasy": ["Slovan Liberec", "FC Slovan Liberec"] },
+    { "id": "136681", "nazev": "Bohemians", "aliasy": ["Bohemians 1905", "Bohemians Praha 1905"] },
+    { "id": "141109", "nazev": "Hradec Králové", "aliasy": ["FC Hradec Králové", "Hradec"] },
+    { "id": "136677", "nazev": "Olomouc", "aliasy": ["Sigma Olomouc", "SK Sigma Olomouc", "Sigma"] },
+    { "id": "140094", "nazev": "Zbrojovka Brno", "aliasy": ["FC Zbrojovka Brno", "Zbrojovka"] },
+    { "id": "141110", "nazev": "Artis Brno", "aliasy": ["FC Artis Brno", "Artis"] },
+    { "id": "134395", "nazev": "Jablonec", "aliasy": ["FK Jablonec"] },
+    { "id": "134000", "nazev": "Mladá Boleslav", "aliasy": ["FK Mladá Boleslav", "Ml. Boleslav"] },
+    { "id": "136680", "nazev": "Teplice", "aliasy": ["FK Teplice"] },
+    { "id": "140093", "nazev": "Pardubice", "aliasy": ["FK Pardubice"] },
+    { "id": "137810", "nazev": "Zlín", "aliasy": ["FC Zlín", "FC Trinity Zlín"] },
+    { "id": "136685", "nazev": "Slovácko", "aliasy": ["1. FC Slovácko"] }
+  ]
+}

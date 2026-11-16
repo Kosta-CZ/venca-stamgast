@@ -1,12 +1,19 @@
-// TheSportsDB: volný zdroj výsledků extraligy (veřejný klíč 123, bez registrace, za data se neplatí).
-// Limit dotazů je přísný (po pár rychlých dotazech vrací 429): dotazy jdou pomalu za sebou a při 429
-// se čeká a zkouší znovu. Kola se ukládají (R2: kotel/<sezóna>/kolo-NN.json) a znovu se stahují jen ta,
-// kde od minula mohl přibýt výsledek. Tabulka se pak počítá z uložených kol (kotel.ts).
+// TheSportsDB: volný zdroj výsledků extraligy a fotbalové 1. ligy (veřejný klíč 123, bez registrace,
+// za data se neplatí). Limit dotazů je přísný (po pár rychlých dotazech vrací 429): dotazy jdou pomalu
+// za sebou a při 429 se čeká a zkouší znovu. Kola se ukládají (R2: <prefix>/<sezóna>/kolo-NN.json)
+// a znovu se stahují jen ta, kde od minula mohl přibýt výsledek. Tabulka se pak počítá z uložených kol.
 
 import type { Store } from './storage.ts';
 
 export const TSDB_BASE = 'https://www.thesportsdb.com/api/v1/json/123';
 export const EXTRALIGA_ID = 4923;
+export const FOTBAL_ID = 4631;
+
+/** Která soutěž a kam se její kola ukládají (kotel = extraliga, liga = fotbalová 1. liga). */
+export interface RoundSource {
+  leagueId: number;
+  prefix: string;
+}
 const UA = { 'user-agent': 'venca-stamgast (https://github.com/Kosta-CZ/venca-stamgast)' };
 
 /** Zápas, jak ho vrací TheSportsDB (jen pole, která čteme). */
@@ -67,7 +74,12 @@ export function slimEvent(e: TsdbEvent): RoundEvent {
   };
 }
 
-const FINAL = new Set(['FT', 'AOT', 'AP', 'AET', 'PEN', 'MATCH FINISHED']);
+const FINAL = new Set(['FT', 'AOT', 'AP', 'AET', 'PEN', 'MATCH FINISHED', 'AWD']);
+
+const POSTPONED = new Set(['PST', 'POSTPONED', 'CANC', 'CANCELLED', 'ABD', 'ABANDONED', 'SUSP', 'SUSPENDED']);
+
+/** Odložený (zrušený, přerušený) zápas: příznak strPostponed nebo stav PST/CANC/ABD (u fotbalu bývá s původním datem). */
+export const isPostponed = (e: Pick<RoundEvent, 'status' | 'postponed'>): boolean => e.postponed || POSTPONED.has(e.status.toUpperCase());
 
 /** Dohraný zápas se skóre (konec v základní době, po prodloužení nebo po nájezdech). */
 export const isFinal = (e: Pick<RoundEvent, 'status' | 'homeGoals' | 'awayGoals'>): boolean =>
@@ -81,10 +93,10 @@ export function endingOf(status: string): 'reg' | 'ot' | 'so' {
   return 'reg';
 }
 
-/** Sezóna extraligy pro den (srpen až červenec): 2026-11-15 → „2026-2027“. */
+/** Sezóna pro den (fotbal začíná v červenci, hokej v září): 2026-11-15 → „2026-2027“. */
 export function seasonFor(date: string): string {
   const [y, m] = date.split('-').map(Number) as [number, number];
-  return m >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+  return m >= 7 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
 }
 
 // ---- Pomalé dotazy ----
@@ -143,8 +155,8 @@ export function tsdbGetter(io: PacedIo): (path: string) => Promise<unknown> {
   };
 }
 
-export async function fetchRound(get: (path: string) => Promise<unknown>, season: string, round: number): Promise<RoundEvent[]> {
-  const body = (await get(`eventsround.php?id=${EXTRALIGA_ID}&r=${round}&s=${season}`)) as { events?: TsdbEvent[] | null } | null;
+export async function fetchRound(get: (path: string) => Promise<unknown>, leagueId: number, season: string, round: number): Promise<RoundEvent[]> {
+  const body = (await get(`eventsround.php?id=${leagueId}&r=${round}&s=${season}`)) as { events?: TsdbEvent[] | null } | null;
   return (body?.events ?? []).filter((e) => e && e.idEvent).map(slimEvent);
 }
 
@@ -153,11 +165,11 @@ export async function fetchRound(get: (path: string) => Promise<unknown>, season
 /** Víc kol extraliga nemá (52 v sezóně se 14 týmy); dál se nehledá. */
 export const MAX_ROUNDS = 60;
 
-export const roundKey = (season: string, round: number): string => `kotel/${season}/kolo-${String(round).padStart(2, '0')}.json`;
+export const roundKey = (prefix: string, season: string, round: number): string => `${prefix}/${season}/kolo-${String(round).padStart(2, '0')}.json`;
 
-/** Má kolo zápas bez výsledku, který se už měl odehrát? Pak se stáhne znovu. */
+/** Má kolo zápas bez výsledku, který se už měl odehrát? Pak se stáhne znovu (odložené obnoví týdenní obnova rozpisu). */
 export const awaitingResults = (r: StoredRound, today: string): boolean =>
-  r.events.some((e) => !isFinal(e) && (!e.date || e.date <= today));
+  r.events.some((e) => !isFinal(e) && !isPostponed(e) && (!e.date || e.date <= today));
 
 const firstOpenDate = (r: StoredRound): string =>
   r.events.filter((e) => !isFinal(e)).map((e) => e.date ?? '9999').sort()[0] ?? '9999';
@@ -182,6 +194,7 @@ export interface SyncOptions {
 export async function syncRounds(
   get: (path: string) => Promise<unknown>,
   store: Store,
+  source: RoundSource,
   season: string,
   opts: SyncOptions,
 ): Promise<Map<number, StoredRound>> {
@@ -193,7 +206,7 @@ export async function syncRounds(
   for (let i = 0; i < all.length; i += 10) {
     await Promise.all(
       all.slice(i, i + 10).map(async (n) => {
-        const body = await store.get(roundKey(season, n));
+        const body = await store.get(roundKey(source.prefix, season, n));
         if (!body) return;
         try {
           const r = JSON.parse(body) as StoredRound;
@@ -220,7 +233,7 @@ export async function syncRounds(
     const have = rounds.get(n);
     const why = !have ? 'nové' : force.has(n) ? 'kolo příspěvku' : awaitingResults(have, opts.today) ? 'čeká na výsledky' : stale.has(n) ? 'obnova rozpisu' : null;
     if (!why) continue;
-    const events = await fetchRound(get, season, n);
+    const events = await fetchRound(get, source.leagueId, season, n);
     requests++;
     if (!events.length) {
       if (!have) {
@@ -231,7 +244,7 @@ export async function syncRounds(
       continue;
     }
     const r: StoredRound = { season, round: n, fetchedAt: now.toISOString(), events };
-    await store.put(roundKey(season, n), JSON.stringify(r, null, 1));
+    await store.put(roundKey(source.prefix, season, n), JSON.stringify(r, null, 1));
     rounds.set(n, r);
     log(`Kolo ${n}: ${why}, dohráno ${events.filter(isFinal).length} z ${events.length}.`);
   }

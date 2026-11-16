@@ -3,6 +3,7 @@
 // Token bota se nikdy nevypisuje: chyby ho maskují.
 
 import type { Draft } from './draft.ts';
+import { leagueOf } from './leagues.ts';
 
 export const TG_API = 'https://api.telegram.org';
 
@@ -47,7 +48,8 @@ export const tgAttr = (text: string): string => tgEscape(text).replace(/"/g, '&q
 export function approvalHeader(d: Draft): string {
   if (d.kind === 'kotel') {
     const hero = d.venca.muz_kola ? `muž kola: ${d.venca.muz_kola.name} (${d.venca.muz_kola.team})` : 'bez muže kola';
-    return `🏒 <b>Extraligový kotel · ${d.facts.round}. kolo</b>\n<i>${tgEscape(d.dayLabel)} · ${tgEscape(hero)} · výraz ${tgEscape(d.venca.vyraz)}</i>`;
+    const l = leagueOf(d);
+    return `${l.emoji} <b>${tgEscape(l.title)} · ${d.facts.round}. kolo</b>\n<i>${tgEscape(d.dayLabel)} · ${tgEscape(hero)} · výraz ${tgEscape(d.venca.vyraz)}</i>`;
   }
   if (d.kind === 'special') {
     const f = d.facts;

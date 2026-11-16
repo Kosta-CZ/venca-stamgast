@@ -4,7 +4,7 @@
 
 import { plural } from './facts.ts';
 import { ascii } from './nhl.ts';
-import { endingOf, isFinal, type RoundEvent, type StoredRound } from './sportsdb.ts';
+import { endingOf, isFinal, isPostponed, type RoundEvent, type StoredRound } from './sportsdb.ts';
 import { dayLabel } from './venca.ts';
 
 export type Ending = 'reg' | 'ot' | 'so';
@@ -87,11 +87,17 @@ export function checkScorers(g: KotelGame): string[] {
   return problems;
 }
 
+/** Body za zápas podle pravidel soutěže. */
+export type PointsRule = (own: number, other: number, ending: Ending) => number;
+
 /** Body v extralize: výhra 3, výhra po prodloužení nebo nájezdech 2, prohra po nich 1. */
 export function extraligaPoints(own: number, other: number, ending: Ending): number {
   if (own > other) return ending === 'reg' ? 3 : 2;
   return ending === 'reg' ? 0 : 1;
 }
+
+/** Body ve fotbale: výhra 3, remíza 1. */
+export const footballPoints: PointsRule = (own, other) => (own > other ? 3 : own === other ? 1 : 0);
 
 interface Stats {
   team: string;
@@ -101,7 +107,7 @@ interface Stats {
   ga: number;
 }
 
-function stats(games: readonly KotelGame[], only?: ReadonlySet<string>): Map<string, Stats> {
+function stats(games: readonly KotelGame[], only?: ReadonlySet<string>, points: PointsRule = extraligaPoints): Map<string, Stats> {
   const rows = new Map<string, Stats>();
   const row = (team: string) => rows.get(team) ?? rows.set(team, { team, games: 0, points: 0, gf: 0, ga: 0 }).get(team)!;
   for (const g of games) {
@@ -111,8 +117,8 @@ function stats(games: readonly KotelGame[], only?: ReadonlySet<string>): Map<str
     const hg = g.homeGoals!, ag = g.awayGoals!;
     h.games++; a.games++;
     h.gf += hg; h.ga += ag; a.gf += ag; a.ga += hg;
-    h.points += extraligaPoints(hg, ag, g.ending);
-    a.points += extraligaPoints(ag, hg, g.ending);
+    h.points += points(hg, ag, g.ending);
+    a.points += points(ag, hg, g.ending);
   }
   return rows;
 }
@@ -122,15 +128,15 @@ function stats(games: readonly KotelGame[], only?: ReadonlySet<string>): Map<str
  * (tak řadí i ČTK). Po základní části (`final`) rozhodují nejdřív vzájemné zápasy týmů se stejným počtem bodů
  * (body, rozdíl skóre, vstřelené góly z minitabulky).
  */
-export function tableFromGames(games: readonly KotelGame[], opts: { final?: boolean } = {}): TableRow[] {
-  const all = stats(games);
+export function tableFromGames(games: readonly KotelGame[], opts: { final?: boolean; points?: PointsRule } = {}): TableRow[] {
+  const all = stats(games, undefined, opts.points);
   const mutual = new Map<string, Stats>();
   if (opts.final) {
     const byPoints = new Map<number, string[]>();
     for (const r of all.values()) byPoints.set(r.points, [...(byPoints.get(r.points) ?? []), r.team]);
     for (const teams of byPoints.values()) {
       if (teams.length < 2) continue;
-      for (const [team, s] of stats(games, new Set(teams))) mutual.set(team, s);
+      for (const [team, s] of stats(games, new Set(teams), opts.points)) mutual.set(team, s);
     }
   }
   const m = (team: string) => mutual.get(team) ?? { points: 0, gf: 0, ga: 0 };
@@ -202,6 +208,8 @@ export interface RoundView {
   games: KotelGame[];
   /** Zápasy, které se už měly odehrát, ale v datech ještě nemají výsledek. */
   missing: string[];
+  /** Zápasy kola, které se teprve hrají (dnes nebo později v dnech kola). */
+  pending: string[];
   /** Týmy, které nejsou v data/extraliga-tymy.json. */
   unknownTeams: string[];
 }
@@ -215,7 +223,7 @@ const gameOrder = (a: RoundEvent, b: RoundEvent, home: (e: RoundEvent) => string
  * Zápas přesunutý na den, který ještě nebyl, se ukáže jako „hraje se …“ a kolo kvůli němu nečeká.
  */
 export function roundView(r: StoredRound, name: TeamNamer, today: string): RoundView {
-  const counted = r.events.filter((e) => isFinal(e) || !e.postponed);
+  const counted = r.events.filter((e) => isFinal(e) || !isPostponed(e));
   const window = roundDays(counted);
   const past = window.filter((d) => d <= today);
   const days = past.length ? past : window;
@@ -229,6 +237,7 @@ export function roundView(r: StoredRound, name: TeamNamer, today: string): Round
   };
   const home = (e: RoundEvent) => cz(e.homeId, e.home);
   const missing: string[] = [];
+  const pending: string[] = [];
 
   const finals = r.events.filter(isFinal).sort((a, b) => gameOrder(a, b, home));
   const open = r.events.filter((e) => !isFinal(e)).sort((a, b) => gameOrder(a, b, home));
@@ -239,17 +248,19 @@ export function roundView(r: StoredRound, name: TeamNamer, today: string): Round
       g.awayGoals = e.awayGoals;
       g.ending = endingOf(e.status);
       if (e.date && !days.includes(e.date)) g.playedOn = e.date;
-    } else if (e.date && e.date > last) {
+    } else if (e.date && (e.date > last || e.date >= today)) {
+      // Odložený zápas, přesunutý zápas nebo zápas, který se hraje dnes: „hraje se …“.
       g.postponedTo = e.date;
-    } else if (e.postponed) {
+      if (window.includes(e.date)) pending.push(`${g.home} – ${g.away}`);
+    } else if (isPostponed(e)) {
       g.postponed = true;
-    } else if (!e.date || e.date <= today) {
+    } else {
       missing.push(`${g.home} – ${g.away}`);
     }
     return g;
   });
 
-  return { round: r.round, mainDate, days, date: last, dayLabel: daysLabel(days.length ? days : [last]), games, missing, unknownTeams: [...unknownTeams] };
+  return { round: r.round, mainDate, days, date: last, dayLabel: daysLabel(days.length ? days : [last]), games, missing, pending, unknownTeams: [...unknownTeams] };
 }
 
 /** „neděle 15. 11.“, „čtvrtek 19. 11. a pátek 20. 11.“, u tří a více dnů rozsah „19.–22. 9.“. */
@@ -274,7 +285,7 @@ export function latestRound(views: readonly RoundView[], today: string): RoundVi
  * Tabulka k danému dni: všechny dohrané zápasy ze všech uložených kol do toho dne včetně. Když je k tomu dni
  * dohraná celá základní část, rozhodují při rovnosti bodů vzájemné zápasy.
  */
-export function tableAsOf(rounds: Iterable<StoredRound>, cutoff: string, name: TeamNamer): TableRow[] {
+export function tableAsOf(rounds: Iterable<StoredRound>, cutoff: string, name: TeamNamer, points: PointsRule = extraligaPoints): TableRow[] {
   const games: KotelGame[] = [];
   let final = true;
   for (const r of rounds) {
@@ -289,16 +300,19 @@ export function tableAsOf(rounds: Iterable<StoredRound>, cutoff: string, name: T
       });
     }
   }
-  return tableFromGames(games, { final });
+  return tableFromGames(games, { final, points });
 }
 
-/** Střelci kola (kandidáti na muže kola) s týmem a počtem gólů. */
+/** Vlastní gól („Novák (vl.)“): do střelců kola ani na muže kola se nepočítá. */
+export const isOwnGoal = (name: string): boolean => /\(vl\.?\)/i.test(name);
+
+/** Střelci kola (kandidáti na muže kola) s týmem a počtem gólů, bez vlastních gólů. */
 export function roundScorers(games: readonly KotelGame[]): { name: string; team: string; goals: number; won: boolean }[] {
   const out: { name: string; team: string; goals: number; won: boolean }[] = [];
   for (const g of games) {
     if (!played(g)) continue;
     for (const [list, team, own, other] of [[g.homeScorers, g.home, g.homeGoals!, g.awayGoals!], [g.awayScorers, g.away, g.awayGoals!, g.homeGoals!]] as const) {
-      for (const s of list) out.push({ name: s.name, team, goals: s.goals, won: own > other });
+      for (const s of list) if (!isOwnGoal(s.name)) out.push({ name: s.name, team, goals: s.goals, won: own > other });
     }
   }
   return out;

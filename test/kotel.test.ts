@@ -23,6 +23,7 @@ function ev(home: string, away: string, score: string | null, date: string, stat
   return { id: String(++n), homeId: null, awayId: null, home, away, homeGoals: h ?? null, awayGoals: a ?? null, date, time, status, postponed: false };
 }
 const round = (r: number, events: RoundEvent[], fetchedAt = '2026-11-16T07:00:00Z'): StoredRound => ({ season: '2026-2027', round: r, fetchedAt, events });
+const KOTEL_SRC = { leagueId: 4923, prefix: 'kotel' };
 
 describe('převod týmů', () => {
   it('podle id TheSportsDB i podle názvu bez diakritiky', () => {
@@ -64,6 +65,7 @@ describe('TheSportsDB', () => {
     expect(seasonFor('2026-11-21')).toBe('2026-2027');
     expect(seasonFor('2027-03-01')).toBe('2026-2027');
     expect(seasonFor('2027-09-10')).toBe('2027-2028');
+    expect(seasonFor('2026-07-25')).toBe('2026-2027');
   });
 
   it('mezi dotazy je pauza, po 429 se čeká a zkouší znovu', async () => {
@@ -97,17 +99,17 @@ describe('TheSportsDB', () => {
       return { events: tsdb[r] ?? null };
     };
     const store = memoryStore();
-    const first = await syncRounds(get, store, '2026-2027', { today: '2026-11-16' });
+    const first = await syncRounds(get, store, KOTEL_SRC, '2026-2027', { today: '2026-11-16' });
     expect([...first.keys()]).toEqual([1, 2]);
     expect(asked).toHaveLength(3);
-    expect(store.data.has(roundKey('2026-2027', 1))).toBe(true);
+    expect(store.data.has(roundKey('kotel', '2026-2027', 1))).toBe(true);
 
     asked.length = 0;
-    await syncRounds(get, store, '2026-2027', { today: '2026-11-16' });
+    await syncRounds(get, store, KOTEL_SRC, '2026-2027', { today: '2026-11-16' });
     expect(asked.map((p) => /r=(\d+)/.exec(p)![1])).toEqual(['3']);
 
     asked.length = 0;
-    await syncRounds(get, store, '2026-2027', { today: '2026-11-21' });
+    await syncRounds(get, store, KOTEL_SRC, '2026-2027', { today: '2026-11-21' });
     expect(asked.map((p) => /r=(\d+)/.exec(p)![1])).toEqual(['2', '3']);
   });
 

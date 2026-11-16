@@ -73,8 +73,19 @@ export function cleanHashtags(v: unknown, max = LIMITS.hashtags): string[] {
   return (Array.isArray(v) ? v : [])
     .filter((h): h is string => typeof h === 'string')
     .map((h) => h.trim().replace(/^#?/, '#').replace(/\s+/g, ''))
-    .filter((h) => /^#[\p{L}\p{N}_]+$/u.test(h) && !/tip|kurz|sazk|sázk|bet/i.test(h))
+    .filter((h) => /^#[\p{L}\p{N}_]+$/u.test(h) && !/tip|kurz|sazk|sázk|bet|chance|fortuna|synot|merkur|kartac|kartáč/i.test(h))
     .slice(0, max);
+}
+
+/** Sázkové kanceláře (i v názvech soutěží): v textech nesmí být (bible, sekce 5). */
+export const SPONSORS = /chance|tipsport|fortuna|synot|betano|merkur|kartáč|kartac|sazka/i;
+
+/** Zmínky sázkových kanceláří v textech: „titulku“ → text. */
+export function sponsorNotes(texts: Record<string, string>): string[] {
+  return Object.entries(texts).flatMap(([where, text]) => {
+    const m = SPONSORS.exec(text);
+    return m ? [`Text v ${where} zmiňuje sázkovou kancelář („${m[0]}“).`] : [];
+  });
 }
 
 /** Poznámky, které Venca sám vrátil v poli `pozor`. */

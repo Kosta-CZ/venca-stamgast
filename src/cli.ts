@@ -3,6 +3,8 @@
 //   make     [--date YYYY-MM-DD] [--demo] [--no-ai]   vyrobí koncept Ranního piva do out/
 //   kotel    [--round N] [--date YYYY-MM-DD] [--no-ai] [--early] [--skip-existing] [--demo]
 //                                                       vyrobí koncept Extraligového kotle (poslední odehrané kolo)
+//   liga     --liga extraliga|fotbal [stejné volby jako kotel, navíc --whole-round]
+//                                                       kolo ligy; --whole-round počká, dokud se kolo nedohraje
 //   special  --stage pozvanka|vysledek [--event SOUBOR] [--date YYYY-MM-DD] [--no-ai] [--skip-existing]
 //                                                       speciál k velké akci z data/specialy (fakta ze dvou zdrojů)
 //   upload   --id ID                                    nahraje koncept do R2 (obrázek + JSON)
@@ -30,6 +32,7 @@ import { kotelHtml } from './render/kotel.ts';
 import { checkKotelVenca, fallbackKotelVenca, kotelCaption, kotelDisclaimer, kotelUserMessage, type KotelVencaOut } from './kotelVenca.ts';
 import { findScorers, type Source } from './scorers.ts';
 import { seasonFor, syncRounds, tsdbGetter } from './sportsdb.ts';
+import { LEAGUES, type LeagueId } from './leagues.ts';
 import {
   checkSpecialVenca, fallbackSpecialVenca, findInvite, findResult, pickEvent, specialCaption, specialDisclaimer, specialId, specialUserMessage,
   type SpecialEvent, type SpecialFacts, type SpecialVencaOut, type Stage,
@@ -260,31 +263,36 @@ function roundStore(): Store {
   }
 }
 
-// Extraligový kotel: kolo z TheSportsDB (kola uložená v R2), střelci přes Claude API s vyhledáváním
-// v českých zdrojích, texty Vency a grafika. Bez --round vezme poslední odehrané kolo.
-async function kotel(): Promise<void> {
+// Kolo ligy (Extraligový kotel, fotbalová 1. liga): kolo z TheSportsDB (kola uložená v R2), střelci přes
+// Claude API s vyhledáváním v českých zdrojích, texty Vency a grafika. Bez --round vezme poslední odehrané kolo.
+async function liga(leagueId: LeagueId): Promise<void> {
   mkdirSync(OUT, { recursive: true });
-  if (flag('demo')) return kotelDemo();
+  const league = LEAGUES[leagueId];
+  if (!league) throw new Error(`Neznámá liga „${leagueId}“ (${Object.keys(LEAGUES).join(', ')}).`);
+  if (flag('demo')) {
+    if (league.id !== 'extraliga') throw new Error('Ukázka je jen pro Kotel: npm run venca -- kotel --demo');
+    return kotelDemo();
+  }
 
   const today = arg('date') ?? pragueToday();
   const season = arg('season') ?? seasonFor(today);
   const want = arg('round') ? Number(arg('round')) : undefined;
   if (want !== undefined && !(Number.isInteger(want) && want > 0)) throw new Error('--round musí být číslo kola.');
-  const teams = teamNamer((JSON.parse(readFileSync(join(ROOT, 'data/extraliga-tymy.json'), 'utf8')) as { tymy: TeamEntry[] }).tymy);
+  const teams = teamNamer((JSON.parse(readFileSync(join(ROOT, league.teamsFile), 'utf8')) as { tymy: TeamEntry[] }).tymy);
   const store = roundStore();
 
   const get = tsdbGetter({ fetch, log: console.log, gapMs: Number(process.env.TSDB_GAP_MS) || undefined });
-  const rounds = await syncRounds(get, store, season, { today, force: want ? [want] : [], log: console.log });
+  const rounds = await syncRounds(get, store, { leagueId: league.tsdbId, prefix: league.key }, season, { today, force: want ? [want] : [], log: console.log });
   if (!rounds.size) throw new Error(`TheSportsDB nemá pro sezónu ${season} žádná kola.`);
   const views = [...rounds.values()].map((r) => roundView(r, teams, today));
   const view = want ? views.find((v) => v.round === want) : latestRound(views, today);
   if (!view) {
     if (want) throw new Error(`Kolo ${want} v datech sezóny ${season} není.`);
-    console.log('Zatím se neodehrálo žádné kolo: Kotel nebude.');
+    console.log(`Zatím se neodehrálo žádné kolo: ${league.title} nebude.`);
     output('has_post', 'false');
     return;
   }
-  const id = draftId(view.date, 'kotel');
+  const id = `${view.date}-${league.key}`;
   output('round', String(view.round));
   console.log(`Kolo ${view.round} (${view.dayLabel}): zápasů ${view.games.length}, bez výsledku ${view.missing.length}.`);
 
@@ -300,10 +308,16 @@ async function kotel(): Promise<void> {
     output('reason', 'waiting');
     return;
   }
+  if (view.pending.length && flag('whole-round')) {
+    console.log(`Kolo se ještě dohrává: ${view.pending.join(', ')}. Zkusí to další běh.`);
+    output('has_post', 'false');
+    output('reason', 'waiting');
+    return;
+  }
 
   const pozor: string[] = [];
   if (view.missing.length) pozor.push(`V datech chybí výsledek: ${view.missing.join(', ')}.`);
-  if (view.unknownTeams.length) pozor.push(`Neznámé týmy (doplň je do data/extraliga-tymy.json): ${view.unknownTeams.join(', ')}.`);
+  if (view.unknownTeams.length) pozor.push(`Neznámé týmy (doplň je do ${league.teamsFile}): ${view.unknownTeams.join(', ')}.`);
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const model = process.env.VENCA_MODEL || DEFAULT_MODEL;
@@ -312,7 +326,7 @@ async function kotel(): Promise<void> {
   let games = view.games;
   let sources: Source[] = [];
   if (io) {
-    const found = await findScorers(io, { round: view.round, dayLabel: view.dayLabel, season, games }, teams, console.log);
+    const found = await findScorers(io, { round: view.round, dayLabel: view.dayLabel, season, games }, teams, console.log, league);
     games = found.games;
     sources = found.sources;
     pozor.push(...found.pozor);
@@ -320,11 +334,11 @@ async function kotel(): Promise<void> {
     pozor.push('Střelci chybí: bez klíče ANTHROPIC_API_KEY se nehledají.');
   }
 
-  const facts: KotelFacts = { round: view.round, dayLabel: view.dayLabel, games, table: tableAsOf(rounds.values(), view.date, teams) };
+  const facts: KotelFacts = { round: view.round, dayLabel: view.dayLabel, games, table: tableAsOf(rounds.values(), view.date, teams, league.points) };
   let venca: KotelVencaOut;
   if (io) {
     const system = readFileSync(join(ROOT, 'prompts/system.md'), 'utf8');
-    const text = await askClaude(io, system, kotelUserMessage(facts, view.date), console.log);
+    const text = await askClaude(io, system, kotelUserMessage(facts, view.date, league), console.log);
     let raw: unknown = {};
     try {
       raw = parseJsonLoose(text);
@@ -334,16 +348,16 @@ async function kotel(): Promise<void> {
     }
     venca = checkKotelVenca(raw, facts, view.date);
   } else {
-    venca = fallbackKotelVenca(facts);
+    venca = fallbackKotelVenca(facts, league);
   }
   if (venca.muz_kola) facts.hero = venca.muz_kola;
 
   const draft: Draft = {
-    id, kind: 'kotel', season, date: view.date, dayLabel: view.dayLabel,
+    id, kind: 'kotel', league: league.id, season, date: view.date, dayLabel: view.dayLabel,
     caption: kotelCaption(venca, sources), venca, facts, sources, pozor: [...pozor, ...venca.pozor],
     model: io ? model : null, createdAt: new Date().toISOString(),
   };
-  const html = kotelHtml({ facts, venca, disclaimer: kotelDisclaimer(sources) });
+  const html = kotelHtml({ facts, venca, disclaimer: kotelDisclaimer(sources), label: league.label });
   writeFileSync(join(OUT, `${id}.html`), html);
   const { htmlToJpeg } = await import('./render/shot.ts');
   await htmlToJpeg(html, SIZE, join(OUT, `${id}.jpg`));
@@ -458,7 +472,9 @@ async function special(): Promise<void> {
   output('pozor', String(draft.pozor.length));
 }
 
-const commands: Record<string, () => Promise<void> | void> = { make, kotel, special, upload, issue, telegram, notify, publish, refresh };
+const commands: Record<string, () => Promise<void> | void> = {
+  make, kotel: () => liga('extraliga'), liga: () => liga((arg('liga') ?? 'extraliga') as LeagueId), special, upload, issue, telegram, notify, publish, refresh,
+};
 
 const cmd = process.argv[2] ?? '';
 const run = commands[cmd];

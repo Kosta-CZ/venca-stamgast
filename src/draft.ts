@@ -4,6 +4,7 @@
 import type { PostFacts } from './facts.ts';
 import type { KotelFacts } from './kotel.ts';
 import type { KotelVencaOut } from './kotelVenca.ts';
+import { leagueOf, type LeagueId } from './leagues.ts';
 import type { Source } from './scorers.ts';
 import { STAGE_LABEL, type SpecialFacts, type SpecialVencaOut, type Stage } from './special.ts';
 import type { VencaOut } from './venca.ts';
@@ -27,8 +28,10 @@ export interface RanniPivoDraft extends DraftBase {
   facts: PostFacts;
 }
 
+/** Kolo ligy: Extraligový kotel (bez `league` nebo extraliga) a fotbalová 1. liga. */
 export interface KotelDraft extends DraftBase {
   kind: 'kotel';
+  league?: LeagueId;
   season: string;
   venca: KotelVencaOut;
   facts: KotelFacts;
@@ -48,7 +51,7 @@ export type DraftKind = Draft['kind'];
 
 export const KIND_LABEL: Record<DraftKind, string> = { 'ranni-pivo': 'Ranní pivo', kotel: 'Extraligový kotel', special: 'Speciál' };
 
-/** Id konceptu: den a druh, např. 2026-11-17-ranni-pivo nebo 2026-11-15-kotel (den kola). */
+/** Id konceptu: den a druh, např. 2026-11-17-ranni-pivo nebo 2026-11-15-kotel (den kola; fotbal 2026-11-22-liga). */
 export const draftId = (date: string, kind: DraftKind): string => `${date}-${kind}`;
 
 export const DRAFT_MARK = (id: string): string => `<!-- venca:draft=${id} -->`;
@@ -61,7 +64,7 @@ export function draftIdFromIssue(body: string): string | null {
 
 /** Název konceptu do zpráv: „Ranní pivo pondělí 9. 11.“, „Extraligový kotel 19. kolo“, „Speciál UFC: pozvánka“. */
 export function draftTitle(d: Draft): string {
-  if (d.kind === 'kotel') return `${KIND_LABEL.kotel} ${d.facts.round}. kolo`;
+  if (d.kind === 'kotel') return `${leagueOf(d).title} ${d.facts.round}. kolo`;
   if (d.kind === 'special') return `${KIND_LABEL.special} ${d.facts.stitek}: ${STAGE_LABEL[d.stage]}`;
   return `${KIND_LABEL[d.kind]} ${d.dayLabel}`;
 }

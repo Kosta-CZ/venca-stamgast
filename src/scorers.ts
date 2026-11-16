@@ -1,14 +1,16 @@
-// Střelci Kotle. TheSportsDB střelce zdarma nedává, dohledá je Claude API s vyhledáváním jen v českých
-// zdrojích (ČTK, hokej.cz, ČT sport). Výjimka z pravidla 1, se kterou majitel souhlasil: jména střelců
+// Střelci kola (Extraligový kotel, fotbalová 1. liga). TheSportsDB střelce zdarma nedává, dohledá je Claude API
+// s vyhledáváním jen v českých zdrojích (ČTK, hokej.cz, ČT sport…). Výjimka z pravidla 1, se kterou majitel souhlasil: jména střelců
 // dodává AI ze zpráv, kód je ale vždy porovná se skóre z TheSportsDB a každý rozpor jde do „pozor“.
 // Odkazy na zdroje jdou do zprávy ke schválení; odkaz, který Claude ve vyhledávání neviděl, se nepočítá.
 
 import { askWithSearch, normalizeUrl, onDomains, type ClaudeIo } from './claude.ts';
 import { checkScorers, expectedScorerGoals, played, scoreText, type Ending, type KotelGame, type KotelScorer, type TeamNamer } from './kotel.ts';
+import { LEAGUES, type League } from './leagues.ts';
 import { ascii } from './nhl.ts';
 import { parseJsonLoose } from './venca.ts';
 
-export const SCORER_DOMAINS = ['ceskenoviny.cz', 'hokej.cz', 'sport.ceskatelevize.cz'];
+/** Zdroje střelců extraligy (fotbal má vlastní seznam v leagues.ts). */
+export const SCORER_DOMAINS = LEAGUES.extraliga.scorerDomains;
 
 /** Zdroj střelců pro zprávu ke schválení: adresa a zápasy, ke kterým patří. */
 export interface Source {
@@ -49,31 +51,40 @@ export function sourceLabel(url: string): string {
 const gameName = (g: Pick<KotelGame, 'home' | 'away'>) => `${g.home} – ${g.away}`;
 
 /** Zadání pro Claude: kolo, dny, zápasy s výsledkem (bez skóre, to musí přinést zdroj) a tvar odpovědi. */
-export function scorersPrompt(round: number, dayLabel: string, season: string, games: readonly KotelGame[]): { system: string; user: string } {
+export function scorersPrompt(round: number, dayLabel: string, season: string, games: readonly KotelGame[], league: League = LEAGUES.extraliga): { system: string; user: string } {
   const list = games.filter(played).map((g) => `- ${gameName(g)}`).join('\n');
   const year = season.replace('-', '/').replace(/\/20(\d\d)$/, '/$1');
+  const hockey = league.sport === 'hokej';
+  const where = league.scorerDomains.map((d) => (d === 'ceskenoviny.cz' ? 'ceskenoviny.cz (zpravodajství ČTK)' : d)).join(', ');
+  const example = hockey
+    ? `{"domaci": "Tým A", "hoste": "Tým B", "skore": "2:1 sn", "strelci_domaci": [{"jmeno": "Novák", "goly": 1}], "strelci_hoste": [{"jmeno": "J. Dvořák", "goly": 1}], "rozhodujici_najezd": "Svoboda", "zdroje": ["https://www.ceskenoviny.cz/zpravy/..."], "poznamka": ""}`
+    : `{"domaci": "Tým A", "hoste": "Tým B", "skore": "2:1", "strelci_domaci": [{"jmeno": "Novák", "goly": 1}, {"jmeno": "Kovář (vl.)", "goly": 1}], "strelci_hoste": [{"jmeno": "J. Dvořák", "goly": 1}], "rozhodujici_najezd": null, "zdroje": ["https://www.ceskenoviny.cz/zpravy/..."], "poznamka": ""}`;
   return {
     system:
-      'Jsi pečlivý sportovní redaktor. Dohledáváš střelce zápasů české hokejové extraligy v českých zpravodajských zdrojích. '
+      `Jsi pečlivý sportovní redaktor. Dohledáváš střelce zápasů české ${league.competition} v českých zpravodajských zdrojích. `
       + 'Vycházíš jen z toho, co ve zdrojích opravdu najdeš: nic nedomýšlíš a nic nedopočítáváš. Odpovídáš jen platným JSON.',
-    user: `Dohledej střelce zápasů ${round}. kola hokejové extraligy, sezóna ${year} (dny kola: ${dayLabel}).
+    user: `Dohledej střelce zápasů ${round}. kola ${league.competition}, sezóna ${year} (dny kola: ${dayLabel}).
 
-Hledej jen na ceskenoviny.cz (zpravodajství ČTK), hokej.cz a sport.ceskatelevize.cz. Nejrychlejší bývá souhrn kola od ČTK nebo zápisy zápasů s řádkem „Branky:“.
+Hledej jen na ${where}. Nejrychlejší bývá souhrn kola od ČTK nebo zápisy zápasů s řádkem „Branky:“.
 
 Zápasy kola (domácí – hosté; v odpovědi piš názvy týmů přesně takhle):
 ${list}
 
 Pro každý zápas uveď:
-- "skore": konečné skóre podle zdroje, např. "4:1", "3:2 pp" (po prodloužení), "2:1 sn" (po samostatných nájezdech),
-- "strelci_domaci" a "strelci_hoste": hráči, kteří dali gól, s počtem gólů. Jméno piš jako ČTK v řádku „Branky“: příjmení, iniciála křestního jména jen tam, kde ji zdroj uvádí (např. "L. Hudáček"). Gól z rozhodujících nájezdů do střelců nepatří.
-- "rozhodujici_najezd": u zápasu rozhodnutého nájezdy hráč, který proměnil rozhodující nájezd, jinak null,
+${hockey
+    ? '- "skore": konečné skóre podle zdroje, např. "4:1", "3:2 pp" (po prodloužení), "2:1 sn" (po samostatných nájezdech),'
+    : '- "skore": konečné skóre podle zdroje, např. "2:1",'}
+- "strelci_domaci" a "strelci_hoste": hráči, kteří dali gól, s počtem gólů. Jméno piš jako ČTK v řádku „Branky“: příjmení, iniciála křestního jména jen tam, kde ji zdroj uvádí (např. "L. Hudáček"). ${hockey
+    ? 'Gól z rozhodujících nájezdů do střelců nepatří.'
+    : 'Vlastní gól zapiš k týmu, kterému se započítal, jako "Příjmení (vl.)" (jméno hráče, který si ho dal).'}
+- "rozhodujici_najezd": ${hockey ? 'u zápasu rozhodnutého nájezdy hráč, který proměnil rozhodující nájezd, jinak null' : 'vždy null'},
 - "zdroje": adresy článků, ze kterých jsi střelce vzal (jen stránky, které jsi opravdu našel nebo otevřel),
 - "poznamka": prázdná, nebo krátce, když je střelec nebo počet gólů nejistý (zdroje se liší, údaj chybí). Překlepy ve zdroji, které na střelce nemají vliv, nepiš.
 
 Když zápas ve zdrojích nenajdeš, nech seznamy střelců prázdné a do "poznamka" napiš proč. Nehádej.
 
 Odpověz jen tímto JSON, bez textu okolo (příklad je smyšlený):
-{"kolo": ${round}, "zapasy": [{"domaci": "Tým A", "hoste": "Tým B", "skore": "2:1 sn", "strelci_domaci": [{"jmeno": "Novák", "goly": 1}], "strelci_hoste": [{"jmeno": "J. Dvořák", "goly": 1}], "rozhodujici_najezd": "Svoboda", "zdroje": ["https://www.ceskenoviny.cz/zpravy/..."], "poznamka": ""}]}`,
+{"kolo": ${round}, "zapasy": [${example}]}`,
   };
 }
 
@@ -204,11 +215,12 @@ export async function findScorers(
   round: { round: number; dayLabel: string; season: string; games: KotelGame[] },
   name: TeamNamer,
   log: (line: string) => void = () => {},
+  league: League = LEAGUES.extraliga,
 ): Promise<ScorerResult & { model: string }> {
   if (!round.games.some(played)) return { games: round.games, pozor: [], sources: [], model: io.model };
-  const prompt = scorersPrompt(round.round, round.dayLabel, round.season, round.games);
+  const prompt = scorersPrompt(round.round, round.dayLabel, round.season, round.games, league);
   try {
-    const answer = await askWithSearch(io, { ...prompt, domains: SCORER_DOMAINS, maxSearches: 10, maxFetches: 10 }, log);
+    const answer = await askWithSearch(io, { ...prompt, domains: league.scorerDomains, maxSearches: 10, maxFetches: 10 }, log);
     let report: ReportGame[];
     try {
       report = parseScorerReport(answer.text);
@@ -216,7 +228,7 @@ export async function findScorers(
       log(`Začátek odpovědi: ${JSON.stringify(answer.text.slice(0, 600))}`);
       throw new Error(`odpověď není čitelný JSON (${e instanceof Error ? e.message : String(e)})`);
     }
-    const res = applyScorers(round.games, report, { seen: answer.seen, name });
+    const res = applyScorers(round.games, report, { seen: answer.seen, name, domains: league.scorerDomains });
     if (answer.stopReason === 'refusal') res.pozor.push('Claude dotaz na střelce odmítl.');
     return { ...res, model: answer.model };
   } catch (e) {
