@@ -158,9 +158,11 @@ export interface NightPlayer {
   savePct: number | null;
   game: GameLine;
   won: boolean;
+  /** Rozpor v datech NHL, který má zkontrolovat člověk. */
+  note?: string;
 }
 
-function goalieNumbers(g: BoxGoalie): { saves: number; shotsAgainst: number; goalsAgainst: number; savePct: number | null } {
+function goalieNumbers(g: BoxGoalie): { saves: number; shotsAgainst: number; goalsAgainst: number; savePct: number | null; note?: string } {
   let saves = g.saves ?? NaN;
   let shotsAgainst = g.shotsAgainst ?? NaN;
   const m = /^(\d+)\s*\/\s*(\d+)$/.exec(g.saveShotsAgainst ?? '');
@@ -170,9 +172,14 @@ function goalieNumbers(g: BoxGoalie): { saves: number; shotsAgainst: number; goa
   }
   saves = Number.isFinite(saves) ? saves : 0;
   shotsAgainst = Number.isFinite(shotsAgainst) ? shotsAgainst : 0;
-  const goalsAgainst = g.goalsAgainst ?? Math.max(0, shotsAgainst - saves);
+  // Obdržené góly se počítají ze střel a zákroků, aby seděly s úspěšností v grafice.
+  // Když API uvádí jiné číslo, jde to ke kontrole (stalo se 15. 11. 2026 u Vladaře: 16/19, ale 4 góly).
+  const goalsAgainst = shotsAgainst > 0 ? Math.max(0, shotsAgainst - saves) : (g.goalsAgainst ?? 0);
   const pct = shotsAgainst > 0 ? saves / shotsAgainst : null;
-  return { saves, shotsAgainst, goalsAgainst, savePct: pct };
+  const note = g.goalsAgainst !== undefined && shotsAgainst > 0 && g.goalsAgainst !== goalsAgainst
+    ? `NHL uvádí ${g.goalsAgainst} obdržené góly, ale ${saves} zákroků z ${shotsAgainst} střel dává ${goalsAgainst}.`
+    : undefined;
+  return { saves, shotsAgainst, goalsAgainst, savePct: pct, ...(note ? { note } : {}) };
 }
 
 /** Odehrál brankář aspoň kus zápasu? (Náhradník na lavičce má v zápisu nulový čas.) */

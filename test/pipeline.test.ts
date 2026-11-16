@@ -180,3 +180,18 @@ describe('úložiště R2', () => {
     expect(() => r2FromEnv({ R2_BUCKET: 'x' })).toThrow(/R2_ENDPOINT/);
   });
 });
+
+describe('rozpor v datech brankáře', () => {
+  it('obdržené góly ze střel, rozpor s API jde ke kontrole', () => {
+    const b: Boxscore = {
+      id: 1, homeTeam: { abbrev: 'EDM' }, awayTeam: { abbrev: 'PHI' },
+      playerByGameStats: { awayTeam: { goalies: [{ playerId: 13, name: { default: 'D. Vladar' }, saveShotsAgainst: '16/19', goalsAgainst: 4, toi: '58:30' }] } },
+    };
+    const l = gameLine({ id: 1, gameState: 'OFF', homeTeam: { abbrev: 'EDM', score: 5 }, awayTeam: { abbrev: 'PHI', score: 2 } });
+    const [v] = czechInBox(b, l, czechs);
+    expect(v?.goalsAgainst).toBe(3);
+    expect(v?.note).toContain('4');
+    const night = { nhlDate: '2026-11-15', players: v ? [v] : [], unfinished: [] };
+    expect(checkVenca({ ...SAMPLE_VENCA, muz_noci: '13' }, night, '2026-11-16').pozor.join(' ')).toContain('Dan Vladař');
+  });
+});

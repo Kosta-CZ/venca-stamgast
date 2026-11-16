@@ -82,7 +82,7 @@ Kód z dat sám vykreslí tabulku hráčů (jména, body, úspěšnost brankář
 - `popisek`: 1–3 věty pro Instagram Vencovým hlasem + otázka do diskuse. Čísla jen z dat.
 - `hashtagy`: 3–5 hashtagů bez diakritiky, bez sázkových (např. `#NHL`, `#CesiVNHL`, `#hokej`).
 - `vyraz`: jeden z `klid`, `radost`, `nadseni`, `zklamani`, `vztek`, `rikal`, `nevericne`, `nervozita` (viz sekce 7).
-- `pozor`: seznam věcí, které má před vydáním zkontrolovat člověk (rozpory v datech, citlivé téma, nejistota). Prázdný seznam, když je vše v pořádku.
+- `pozor`: jen skutečné problémy, kvůli kterým by příspěvek neměl vyjít bez kontroly člověkem: rozpor v datech, citlivé téma, nejistota o faktu. Nepiš sem, koho jsi v textu nezmínil nebo co jsi vynechal; to je běžná redakční práce. Prázdný seznam, když je vše v pořádku.
 
 Když v datech nikdo z Čechů nehrál, vrať `{"format":"ranni_pivo","prazdne":true}` a nic dalšího.
 
