@@ -70,7 +70,8 @@ export function scorersPrompt(round: number, dayLabel: string, season: string, g
       + 'Vycházíš jen z toho, co ve zdrojích opravdu najdeš: nic nedomýšlíš a nic nedopočítáváš. Odpovídáš jen platným JSON.',
     user: `Dohledej střelce zápasů ${round}. kola ${league.competition}, sezóna ${year} (dny kola: ${dayLabel}).
 
-Hledej jen na ${where}. Nejrychlejší bývá souhrn kola od ČTK nebo zápisy zápasů s řádkem „Branky:“.
+Hledej jen na ${where}. Nejrychlejší bývá souhrn kola od ČTK (často ve dvou článcích, každý pro část zápasů) nebo zápisy zápasů s řádkem „Branky:“.
+Šetři hledáním i otevíráním stránek (každé stojí peníze): když máš střelce zápasu ze souhrnu, jeho samostatný článek už neotevírej; samostatně dohledej jen zápasy, které v souhrnu chybí.
 
 Zápasy kola (domácí – hosté; v odpovědi piš názvy týmů přesně takhle):
 ${list}
@@ -225,7 +226,8 @@ export async function findScorers(
   if (!round.games.some(played)) return { games: round.games, pozor: [], sources: [], model: io.model };
   const prompt = scorersPrompt(round.round, round.dayLabel, round.season, round.games, league);
   try {
-    const answer = await askWithSearch(io, { ...prompt, domains: league.scorerDomains, maxSearches: 10, maxFetches: 10 }, log);
+    // Strop: souhrn kola + pár samostatných zápasů se vejde; víc by jen zdražilo (hledání $0.01, stránka tokeny).
+    const answer = await askWithSearch(io, { ...prompt, domains: league.scorerDomains, maxSearches: 8, maxFetches: 8 }, log);
     let report: ReportGame[];
     try {
       report = parseScorerReport(answer.text);
