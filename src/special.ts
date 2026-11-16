@@ -344,7 +344,7 @@ async function searchGroup<T extends { sources: string[]; note: string }>(
   io: ClaudeIo, label: string, domains: string[], user: string, parse: (text: string) => T, empty: T, log: (l: string) => void,
 ): Promise<{ report: T; seen: string[] }> {
   try {
-    const a = await askWithSearch(io, { system: FACTS_SYSTEM, user, domains, maxSearches: 6, maxFetches: 6 }, (l) => log(`[${label}] ${l}`));
+    const a = await askWithSearch(io, { system: FACTS_SYSTEM, user, domains, maxSearches: 8, maxFetches: 6 }, (l) => log(`[${label}] ${l}`));
     try {
       return { report: parse(a.text), seen: a.seen };
     } catch {
