@@ -1,0 +1,160 @@
+# Ranní pivo: každé ráno vyrobí příspěvek o Češích v NHL z noční noci a založí issue ke schválení.
+# Vydává se až komentářem „/vydat“ v issue (úloha vydat.yml). Automaticky jen s proměnnou
+# AUTO_RANNI_PIVO=true a jen když kontrola nic nenašla (pozor = 0).
+#
+# Postup nastavení je v docs/nastaveni.md. Bez ANTHROPIC_API_KEY vyjdou suché texty bez Vency,
+# bez nastavení R2 se obrázek nenahraje (zůstane v artefaktu běhu) a nic se nevydá.
+
+name: Ranní pivo
+
+on:
+  schedule:
+    # 6:10 UTC = 7:10 v zimě, 8:10 v létě: zápasy na západním pobřeží už jsou dohrané.
+    - cron: '10 6 * * *'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Den příspěvku YYYY-MM-DD (prázdné = dnes)'
+        required: false
+      ai:
+        description: 'Texty od Vency (Claude API)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ranni-pivo
+  cancel-in-progress: false
+
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalace
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Výroba příspěvku
+        id: make
+        env:
+          ANTHROPIC_API_KEY: ${{ (github.event_name == 'schedule' || inputs.ai) && secrets.ANTHROPIC_API_KEY || '' }}
+          VENCA_MODEL: ${{ vars.VENCA_MODEL }}
+          DATE: ${{ inputs.date }}
+        run: |
+          if [ -n "$DATE" ]; then
+            npm run -s venca -- make --date "$DATE"
+          else
+            npm run -s venca -- make
+          fi
+
+      - name: Příspěvek k nahlédnutí
+        if: steps.make.outputs.has_post == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ranni-pivo
+          retention-days: 14
+          path: out/
+
+      - name: Nahrání do úložiště
+        id: upload
+        if: steps.make.outputs.has_post == 'true' && vars.R2_PUBLIC_URL != ''
+        env:
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: npm run -s venca -- upload --id "${{ steps.make.outputs.id }}"
+
+      - name: Vydání rovnou, nebo issue ke schválení
+        if: steps.make.outputs.has_post == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ID: ${{ steps.make.outputs.id }}
+          POZOR: ${{ steps.make.outputs.pozor }}
+          UPLOADED: ${{ steps.upload.outputs.image_url != '' }}
+          AUTO: ${{ vars.AUTO_RANNI_PIVO == 'true' }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+        run: |
+          if [ "$AUTO" = true ] && [ "$POZOR" = 0 ] && [ "$UPLOADED" = true ] && [ -n "$IG_ACCESS_TOKEN" ]; then
+            echo "Kontrola prošla a vydávání je automatické: vydávám."
+            npm run -s venca -- publish --id "$ID"
+            exit 0
+          fi
+          title="$(npm run -s venca -- issue --id "$ID" --title)"
+          if gh issue list --state open --limit 100 --json title --jq '.[].title' | grep -Fxq "$title"; then
+            echo "Issue „$title“ už je otevřené."
+            exit 0
+          fi
+          gh label create ke-schvaleni --color F5B027 --description 'Koncept čeká na /vydat' 2>/dev/null || true
+          npm run -s venca -- issue --id "$ID" > "$RUNNER_TEMP/body.md"
+          gh issue create --title "$title" --label ke-schvaleni --body-file "$RUNNER_TEMP/body.md" --assignee "${{ github.repository_owner }}"
+
+  # Token Instagramu platí 60 dní: každé ráno se prodlouží. Nový token uloží úloha sama jen
+  # s tajemstvím SOCIAL_ADMIN_TOKEN (osobní token GitHubu s právem na Secrets), jinak dá vědět issue.
+  token:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Je token nastavený?
+        id: has
+        env:
+          HAS: ${{ secrets.IG_ACCESS_TOKEN != '' }}
+        run: echo "token=$HAS" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.has.outputs.token == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.has.outputs.token == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Prodloužení tokenu
+        id: refresh
+        if: steps.has.outputs.token == 'true'
+        continue-on-error: true
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          npm ci
+          npm run -s venca -- refresh --out "$RUNNER_TEMP/ig-token"
+
+      - name: Uložení nového tokenu
+        id: store
+        if: steps.refresh.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SOCIAL_ADMIN_TOKEN }}
+        run: |
+          if [ -n "$GH_TOKEN" ] && [ -s "$RUNNER_TEMP/ig-token" ]; then
+            gh secret set IG_ACCESS_TOKEN --repo "$GITHUB_REPOSITORY" < "$RUNNER_TEMP/ig-token"
+          else
+            echo "manual=true" >> "$GITHUB_OUTPUT"
+          fi
+          rm -f "$RUNNER_TEMP/ig-token"
+
+      - name: Upozornění majiteli
+        if: steps.store.outputs.manual == 'true' || (steps.refresh.outputs.days != '' && steps.refresh.outputs.days < 10)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          title="Token Instagramu je potřeba obnovit"
+          gh issue list --state open --json title --jq '.[].title' | grep -Fxq "$title" && exit 0
+          gh issue create --title "$title" --body "Token pro @venca_stamgast brzy vyprší nebo Instagram vydal nový a úloha ho nemá kam uložit. Postup je v docs/nastaveni.md, část Token. @${{ github.repository_owner }}"

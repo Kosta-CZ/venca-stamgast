@@ -1,0 +1,111 @@
+# Schválení konceptu: majitel napíše do issue „Ke schválení…“ komentář /vydat (vydá na Instagram)
+# nebo /zahodit (zavře bez vydání). Funguje i z mobilní aplikace GitHubu.
+# Repozitář je veřejný: úloha poslechne jen majitele repozitáře, ničí jiný komentář ji nespustí.
+# Ruční spuštění (Run workflow) umí vydat koncept podle id, se zaškrtnutou zkouškou nic nevydá.
+
+name: Vydání na Instagram
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      id:
+        description: 'Id konceptu, např. 2026-11-17-ranni-pivo'
+        required: true
+      dry_run:
+        description: 'Jen zkouška (Instagram obrázek přijme, ale nevydá)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: vydat
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.pull_request == null &&
+       contains(github.event.issue.labels.*.name, 'ke-schvaleni') &&
+       github.event.comment.user.login == github.repository_owner &&
+       (startsWith(github.event.comment.body, '/vydat') || startsWith(github.event.comment.body, '/zahodit')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      ISSUE: ${{ github.event.issue.number }}
+    steps:
+      - name: Co se má stát
+        id: what
+        env:
+          BODY: ${{ github.event.issue.body }}
+          COMMENT: ${{ github.event.comment.body }}
+          INPUT_ID: ${{ inputs.id }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            id="$INPUT_ID"; action=vydat
+            [ "$DRY" = true ] && action=zkouska
+          else
+            id="$(printf '%s' "$BODY" | grep -oE 'venca:draft=[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z-]+' | head -1 | cut -d= -f2)"
+            case "$COMMENT" in /zahodit*) action=zahodit ;; *) action=vydat ;; esac
+          fi
+          if ! printf '%s' "$id" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z-]+$'; then
+            echo "::error::V issue chybí platná značka konceptu."
+            exit 1
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+
+      - name: Zahodit
+        if: steps.what.outputs.action == 'zahodit'
+        run: |
+          gh issue edit "$ISSUE" --remove-label ke-schvaleni
+          gh issue close "$ISSUE" --comment "Zahozeno, na Instagram nic nejde."
+
+      - uses: actions/checkout@v4
+        if: steps.what.outputs.action != 'zahodit'
+
+      - uses: actions/setup-node@v4
+        if: steps.what.outputs.action != 'zahodit'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Vydání
+        id: publish
+        if: steps.what.outputs.action != 'zahodit'
+        env:
+          ID: ${{ steps.what.outputs.id }}
+          ACTION: ${{ steps.what.outputs.action }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+        run: |
+          npm ci
+          if [ "$ACTION" = zkouska ]; then
+            npm run -s venca -- publish --id "$ID" --dry-run
+          else
+            npm run -s venca -- publish --id "$ID"
+          fi
+
+      - name: Zápis do issue
+        if: always() && github.event_name == 'issue_comment' && steps.what.outputs.action == 'vydat'
+        env:
+          OK: ${{ steps.publish.outcome == 'success' }}
+          LINK: ${{ steps.publish.outputs.permalink }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$OK" = true ]; then
+            gh label create vydano --color 2E9E5B --description 'Vyšlo na Instagramu' 2>/dev/null || true
+            gh issue edit "$ISSUE" --remove-label ke-schvaleni --add-label vydano
+            gh issue close "$ISSUE" --comment "Vydáno: ${LINK:-hotovo}"
+          else
+            gh issue comment "$ISSUE" --body "Vydání se nepovedlo, koncept čeká dál. Podrobnosti: $RUN_URL"
+          fi

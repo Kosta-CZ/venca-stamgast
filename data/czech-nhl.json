@@ -1,0 +1,24 @@
+{
+  "_poznamka": "Čeští hráči v NHL. Hledají se v zápisech zápasů podle jména (iniciála + příjmení bez diakritiky), tým je jen pro přehled: po přestupu se hráč najde i v novém dresu. Volitelné nhlId zpřesní hledání. Seznam podle soupisek k 2. 11. 2026; nového hráče stačí připsat.",
+  "hraci": [
+    { "jmeno": "Lukáš Dostál", "pozice": "G", "tym": "ANA" },
+    { "jmeno": "David Pastrňák", "pozice": "F", "tym": "BOS" },
+    { "jmeno": "Pavel Zacha", "pozice": "F", "tym": "BOS" },
+    { "jmeno": "Jiří Kulich", "pozice": "F", "tym": "BUF" },
+    { "jmeno": "Adam Klapka", "pozice": "F", "tym": "CGY" },
+    { "jmeno": "Martin Nečas", "pozice": "F", "tym": "COL" },
+    { "jmeno": "Radek Faksa", "pozice": "F", "tym": "DAL" },
+    { "jmeno": "Radko Gudas", "pozice": "D", "tym": "FLA" },
+    { "jmeno": "Jakub Dobeš", "pozice": "G", "tym": "MTL" },
+    { "jmeno": "Ondřej Palát", "pozice": "F", "tym": "NYI" },
+    { "jmeno": "Jaroslav Chmelař", "pozice": "F", "tym": "NYR" },
+    { "jmeno": "Dan Vladař", "pozice": "G", "tym": "PHI" },
+    { "jmeno": "David Jiříček", "pozice": "D", "tym": "PHI" },
+    { "jmeno": "Libor Hájek", "pozice": "D", "tym": "SJS" },
+    { "jmeno": "Adam Jiříček", "pozice": "D", "tym": "STL" },
+    { "jmeno": "Karel Vejmelka", "pozice": "G", "tym": "UTA" },
+    { "jmeno": "Filip Hronek", "pozice": "D", "tym": "VAN" },
+    { "jmeno": "Filip Chytil", "pozice": "F", "tym": "VAN" },
+    { "jmeno": "Tomáš Hertl", "pozice": "F", "tym": "VGK" }
+  ]
+}

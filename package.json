@@ -1,0 +1,25 @@
+{
+  "name": "venca-stamgast",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Venca Štamgast: AI postava sportovního účtu. Ranní příspěvky z dat, schválení komentářem, vydání na Instagram.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "venca": "tsx src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "aws4fetch": "^1.0.20",
+    "playwright": "1.56.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  }
+}
