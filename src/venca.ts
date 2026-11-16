@@ -130,7 +130,7 @@ export function checkVenca(raw: unknown, night: Night, pragueDate: string): Venc
     .slice(0, LIMITS.hashtags);
 
   if (night.unfinished.length) pozor.push(`Při výrobě nebyly dohrané zápasy: ${night.unfinished.join(', ')}. Mohli v nich hrát Češi.`);
-  for (const p of night.players) if (p.note) pozor.push(`Data u ${p.jmeno}: ${p.note}`);
+  for (const p of night.players) if (p.note) pozor.push(`Rozpor v datech (${p.jmeno}): ${p.note}`);
 
   return { muz_noci: muz, titulek, hlaska, popisek, hashtagy, vyraz, pozor };
 }
