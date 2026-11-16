@@ -24,6 +24,7 @@ Actions**, nikdy v kódu ani v chatu.
 | Secret | `CLOUDFLARE_API_TOKEN` | Token Cloudflare (šablona „Edit Cloudflare Workers“) pro nasazení bota. |
 | Variable | `CLOUDFLARE_ACCOUNT_ID` | Id účtu Cloudflare. |
 | Secret | `BOT_GITHUB_TOKEN` | Token GitHubu jen s právem **Actions** na tento repozitář: bot jím spouští vydání. |
+| Secret | `API_SPORTS_KEY` | Klíč z api-sports.io (Account → My Access), jeden pro fotbal i hokej. Tarif Free má jen sezóny 2022–2024, na aktuální je potřeba placený. Co klíč vrací, ukáže ruční úloha **Zdroje dat (kontrola)**. |
 
 ## 1. Instagram @venca_stamgast
 
