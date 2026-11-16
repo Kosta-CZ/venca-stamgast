@@ -135,6 +135,7 @@ ${list}
 
 Hledej jen na těchto webech: ${domains.join(', ')}.
 U každého zápasu, který ve zdroji najdeš, opiš ze zdroje ${numbers}. Datum piš podle místa konání.
+Jméno hráče a soupeře piš přesně tak, jak jsou v seznamu výše, i když je zdroj píše jinak (např. „Kolín nad Rýnem“ místo „Köln“).
 Nic nedopočítávej a nedoplňuj z paměti. Zápas, který ve zdrojích nenajdeš, vynech. Jiné zápasy nepřidávej.
 
 ${answerShape(cfg.sport)}`;
@@ -315,7 +316,8 @@ interface GroupResult {
 
 async function searchGroup(io: ClaudeIo, label: string, user: string, domains: string[], limits: { searches: number; fetches: number }, log: (l: string) => void): Promise<GroupResult> {
   try {
-    const a = await askWithSearch(io, { system: DIGEST_SYSTEM, user, domains, maxSearches: limits.searches, maxFetches: limits.fetches }, (l) => log(`[${label}] ${l}`));
+    // Menší stránky: zpravodajské články se vejdou, dlouhé online přenosy se zkrátí (jinak by hledání bylo drahé).
+    const a = await askWithSearch(io, { system: DIGEST_SYSTEM, user, domains, maxSearches: limits.searches, maxFetches: limits.fetches, maxPageTokens: 12000 }, (l) => log(`[${label}] ${l}`));
     try {
       return { report: parseDigest(a.text), seen: a.seen };
     } catch {

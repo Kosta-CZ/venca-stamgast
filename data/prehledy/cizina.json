@@ -10,6 +10,6 @@
   "zdroje_a": ["espn.com", "skysports.com", "uefa.com", "bundesliga.com", "premierleague.com"],
   "zdroje_b": ["isport.blesk.cz", "sport.cz", "ceskenoviny.cz", "sport.ceskatelevize.cz", "fotbal.cz"],
   "hashtagy": ["#fotbal", "#CesiVCizine", "#legionari"],
-  "hledani": 16,
-  "stranky": 12
+  "hledani": 12,
+  "stranky": 6
 }

@@ -109,6 +109,7 @@ describe('přehledy: dvě nezávislá hledání', () => {
       const body = JSON.parse(String(init?.body));
       bodies.push(body.tools[0].allowed_domains);
       prompts.push(String(body.messages[0].content));
+      expect(body.tools[1].max_content_tokens).toBe(12000);
       return new Response(JSON.stringify(reply(body.tools[0].allowed_domains)), { headers: { 'content-type': 'application/json' } });
     });
     const r = await findDigest({ fetch: f as unknown as typeof fetch, apiKey: 'k', model: 'claude-sonnet-5-5' }, LEG, '2026-11-23');

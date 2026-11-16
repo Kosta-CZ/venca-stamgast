@@ -131,6 +131,11 @@ export interface SearchAsk {
   domains: string[];
   maxSearches?: number;
   maxFetches?: number;
+  /**
+   * Nejvýš tokenů z jedné stažené stránky (výchozí 40 000). Stránka zůstává v kontextu po celé hledání
+   * a každý další krok ji znovu čte, takže menší strop výrazně zlevní hledání s mnoha kroky.
+   */
+  maxPageTokens?: number;
 }
 
 export interface SearchAnswer {
@@ -190,7 +195,7 @@ export async function askWithSearch(io: ClaudeIo, ask: SearchAsk, log: (line: st
   let domains = [...ask.domains];
   const tools = () => [
     { type: 'web_search_20260209' as const, name: 'web_search' as const, max_uses: ask.maxSearches ?? 8, allowed_domains: domains },
-    { type: 'web_fetch_20260209' as const, name: 'web_fetch' as const, max_uses: ask.maxFetches ?? 8, allowed_domains: domains, max_content_tokens: 40000 },
+    { type: 'web_fetch_20260209' as const, name: 'web_fetch' as const, max_uses: ask.maxFetches ?? 8, allowed_domains: domains, max_content_tokens: ask.maxPageTokens ?? 40000 },
   ];
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: ask.user }];
   const all: Block[] = [];
@@ -227,7 +232,11 @@ export async function askWithSearch(io: ClaudeIo, ask: SearchAsk, log: (line: st
   }
   if (!m) throw new Error('Claude neodpověděl.');
   const text = finalText(all);
-  log(`${describe(m, text)} Hledání ${t.searches}×, stažené stránky ${t.fetches}×. ${tallyText(t)}`);
+  // Velikost kontextu v posledním kroku hledání (podle ní se ladí strop stránek a hledání).
+  const steps = (m.usage.iterations ?? []).filter((i): i is Anthropic.Beta.BetaMessageIterationUsage => i.type === 'message');
+  const last = steps[steps.length - 1];
+  const context = last ? ` Kontext na konci ${kilo(last.input_tokens + last.cache_creation_input_tokens + last.cache_read_input_tokens)}, kroků ${steps.length}.` : '';
+  log(`${describe(m, text)} Hledání ${t.searches}×, stažené stránky ${t.fetches}×. ${tallyText(t)}${context}`);
   return { text, seen: seenUrls(all), searches: t.searches, fetches: t.fetches, model: m.model, stopReason: m.stop_reason };
 }
 
