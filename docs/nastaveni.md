@@ -91,7 +91,8 @@ Nic nového se nenastavuje: Kotel používá stejné klíče jako Ranní pivo (C
 - **Ručně:** Actions → **Extraligový kotel** → Run workflow, volitelně číslo kola (prázdné = poslední odehrané).
 - **Data:** výsledky z TheSportsDB (zdarma, asi 10 dotazů za minutu). Kola se ukládají do R2
   (`kotel/<sezóna>/kolo-NN.json`), první běh sezóny stáhne celý rozpis (asi 7 minut), další jen nová kola.
-  Tabulka se počítá z uložených výsledků (3-2-1-0, při rovnosti bodů vzájemné zápasy).
+  Tabulka se počítá z uložených výsledků (3-2-1-0; při rovnosti bodů rozdíl skóre a vstřelené góly, stejně jako
+  tabulka ČTK; po základní části rozhodují vzájemné zápasy).
 - **Střelci:** dohledá je Claude API s vyhledáváním jen na ceskenoviny.cz, hokej.cz a sport.ceskatelevize.cz.
   Kód je porovná se skóre z TheSportsDB; rozpory jdou do „Ke kontrole“ a odkazy na zdroje do zprávy v Telegramu.
 - **Názvy týmů:** `data/extraliga-tymy.json`. Neznámý tým (třeba nováček) se ukáže ke kontrole, stačí ho připsat.

@@ -130,11 +130,15 @@ describe('kolo a tabulka', () => {
     expect(v.games.map((g) => [g.homeGoals, g.awayGoals, g.ending, g.postponedTo])).toEqual(SAMPLE_KOTEL.games.map((g) => [g.homeGoals, g.awayGoals, g.ending, g.postponedTo]));
   });
 
-  it('tabulka po 19. kole sedí se zprávou ČTK (3-2-1-0, vzájemné zápasy při rovnosti bodů)', () => {
+  it('tabulka po 19. kole sedí s tabulkou ČTK (3-2-1-0, při rovnosti bodů rozdíl skóre a vstřelené góly)', () => {
     const table = tableAsOf(SEASON, '2026-11-15', name);
     expect(table.slice(0, 4)).toEqual(SAMPLE_KOTEL.table);
-    expect(table).toHaveLength(14);
-    expect(table.find((r) => r.team === 'Kometa')?.games).toBe(17);
+    // Tabulka ČTK 15. 11. 2026 (ceskenoviny.cz, souhrn 19. kola): tým, zápasy, body.
+    expect(table.map((r) => `${r.pos}. ${r.team} ${r.games} ${r.points}`)).toEqual([
+      '1. Třinec 19 48', '2. Pardubice 19 39', '3. Kladno 19 32', '4. Budějovice 19 32', '5. Plzeň 19 30',
+      '6. Karlovy Vary 18 28', '7. Sparta 19 28', '8. Liberec 18 27', '9. Hradec Králové 18 27', '10. Kometa 17 24',
+      '11. Litvínov 19 21', '12. Boleslav 19 21', '13. Vítkovice 18 18', '14. Olomouc 19 15',
+    ]);
   });
 
   it('předehrávka se do tabulky počítá podle dne, kdy se hrála', () => {
@@ -147,11 +151,12 @@ describe('kolo a tabulka', () => {
     expect(t.find((r) => r.team === 'B')?.games).toBe(1);
   });
 
-  it('při rovnosti bodů rozhodují vzájemné zápasy, ne celkové skóre', () => {
+  it('při rovnosti bodů v sezóně rozhoduje skóre, po základní části vzájemné zápasy', () => {
     const g = (home: string, away: string, h: number, a: number): KotelGame => ({ home, away, homeGoals: h, awayGoals: a, ending: 'reg', homeScorers: [], awayScorers: [] });
     // A i B mají 6 bodů, A má lepší celkové skóre (+9 proti +2), ale vzájemný zápas vyhrál B.
-    const t = tableFromGames([g('A', 'X', 9, 0), g('B', 'Y', 1, 0), g('B', 'A', 1, 0), g('A', 'Y', 1, 0)]);
-    expect(t.map((r) => `${r.team} ${r.points}`).slice(0, 2)).toEqual(['B 6', 'A 6']);
+    const games = [g('A', 'X', 9, 0), g('B', 'Y', 1, 0), g('B', 'A', 1, 0), g('A', 'Y', 1, 0)];
+    expect(tableFromGames(games).map((r) => `${r.team} ${r.points}`).slice(0, 2)).toEqual(['A 6', 'B 6']);
+    expect(tableFromGames(games, { final: true }).map((r) => `${r.team} ${r.points}`).slice(0, 2)).toEqual(['B 6', 'A 6']);
   });
 
   it('dny kola bez předehrávek, popisek dvou dnů i rozsahu', () => {

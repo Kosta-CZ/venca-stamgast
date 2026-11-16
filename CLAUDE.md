@@ -73,7 +73,8 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
 - Výsledky: TheSportsDB `eventsround` (limit asi 10 dotazů za minutu, pak 429 a 2 minuty pauza; dotazy jdou po 7 s).
   Kola se ukládají do R2 `kotel/<sezóna>/kolo-NN.json` a znovu se stahují jen ta, kde mohl přibýt výsledek.
   Předehrávky a dohrávky jsou běžné: tabulka se počítá ze všech dohraných zápasů do posledního dne kola
-  (3-2-1-0, při rovnosti bodů vzájemné zápasy). Tabulka po 19. kole sedí se zprávou ČTK (test s fixture).
+  (3-2-1-0; při rovnosti bodů rozdíl skóre a vstřelené góly jako u ČTK, vzájemné zápasy až po základní části).
+  Celá tabulka po 19. kole sedí s tabulkou ČTK (test s fixture `test/fixtures/extraliga-2026-2027.json`).
 - Střelci: Claude API s web search a web fetch jen na ceskenoviny.cz, hokej.cz, sport.ceskatelevize.cz. Skóre do zadání
   nejde, zdroj ho musí přinést sám; kód porovná skóre zdroje i součet gólů střelců s TheSportsDB a odkazy s tím, co
   Claude ve vyhledávání opravdu viděl. Pravidlo 1 má tak jednu výjimku (majitel souhlasil): střelce dodává AI ze zpráv,

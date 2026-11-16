@@ -118,17 +118,20 @@ function stats(games: readonly KotelGame[], only?: ReadonlySet<string>): Map<str
 }
 
 /**
- * Tabulka z odehraných zápasů. Při rovnosti bodů rozhodují vzájemné zápasy týmů se stejným počtem bodů
- * (body, rozdíl skóre, vstřelené góly), pak celkový rozdíl skóre a vstřelené góly.
+ * Tabulka z odehraných zápasů. V průběhu sezóny rozhoduje při rovnosti bodů rozdíl skóre, pak vstřelené góly
+ * (tak řadí i ČTK). Po základní části (`final`) rozhodují nejdřív vzájemné zápasy týmů se stejným počtem bodů
+ * (body, rozdíl skóre, vstřelené góly z minitabulky).
  */
-export function tableFromGames(games: readonly KotelGame[]): TableRow[] {
+export function tableFromGames(games: readonly KotelGame[], opts: { final?: boolean } = {}): TableRow[] {
   const all = stats(games);
-  const byPoints = new Map<number, string[]>();
-  for (const r of all.values()) byPoints.set(r.points, [...(byPoints.get(r.points) ?? []), r.team]);
   const mutual = new Map<string, Stats>();
-  for (const teams of byPoints.values()) {
-    if (teams.length < 2) continue;
-    for (const [team, s] of stats(games, new Set(teams))) mutual.set(team, s);
+  if (opts.final) {
+    const byPoints = new Map<number, string[]>();
+    for (const r of all.values()) byPoints.set(r.points, [...(byPoints.get(r.points) ?? []), r.team]);
+    for (const teams of byPoints.values()) {
+      if (teams.length < 2) continue;
+      for (const [team, s] of stats(games, new Set(teams))) mutual.set(team, s);
+    }
   }
   const m = (team: string) => mutual.get(team) ?? { points: 0, gf: 0, ga: 0 };
   return [...all.values()]
@@ -255,19 +258,26 @@ export function latestRound(views: readonly RoundView[], today: string): RoundVi
   return views.filter((v) => roundIsPast(v, today)).sort((a, b) => b.date.localeCompare(a.date) || b.round - a.round)[0];
 }
 
-/** Tabulka k danému dni: všechny dohrané zápasy ze všech uložených kol do toho dne včetně. */
+/**
+ * Tabulka k danému dni: všechny dohrané zápasy ze všech uložených kol do toho dne včetně. Když je k tomu dni
+ * dohraná celá základní část, rozhodují při rovnosti bodů vzájemné zápasy.
+ */
 export function tableAsOf(rounds: Iterable<StoredRound>, cutoff: string, name: TeamNamer): TableRow[] {
   const games: KotelGame[] = [];
+  let final = true;
   for (const r of rounds) {
     for (const e of r.events) {
-      if (!isFinal(e) || !e.date || e.date > cutoff) continue;
+      if (!isFinal(e) || !e.date || e.date > cutoff) {
+        final = false;
+        continue;
+      }
       games.push({
         home: name(e.homeId, e.home) ?? e.home, away: name(e.awayId, e.away) ?? e.away,
         homeGoals: e.homeGoals, awayGoals: e.awayGoals, ending: endingOf(e.status), homeScorers: [], awayScorers: [],
       });
     }
   }
-  return tableFromGames(games);
+  return tableFromGames(games, { final });
 }
 
 /** Střelci kola (kandidáti na muže kola) s týmem a počtem gólů. */
