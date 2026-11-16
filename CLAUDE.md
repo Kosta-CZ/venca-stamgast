@@ -115,9 +115,12 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
 ### Cena (měřeno 16. 11. 2026, Claude API, data jsou zdarma)
 
 - Log každého běhu ukazuje tokeny a cenu, koncept ji nese v `costUsd` a zpráva ke schválení ji ukáže („💰“).
-- Hledání posílá `cache_control` (opakované čtení nalezeného za 5 % ceny). Kolo ligy/Kotel asi 7–8 Kč
-  (hledání střelců ~$0.31, texty ~$0.03), Ranní pivo pod 1 Kč, prázdný přehled ~5 Kč, plný víc (každé hledání
-  $0.01). Výsledek speciálu: nejdřív mezinárodní zdroje, české jen když výsledek už mají.
+- Hledání posílá `cache_control` (opakované čtení nalezeného za 5 % ceny) a střelci se berou ze souhrnu kola ČTK
+  (strop 8 hledání a 8 stránek). Kolo ligy asi 4,4 Kč, Kotel 3,4 Kč (hledání střelců $0.12–0.17, texty ~$0.03),
+  Ranní pivo pod 1 Kč, přehled 4–9 Kč (každé hledání $0.01). Výsledek speciálu: nejdřív mezinárodní zdroje,
+  české jen když výsledek už mají.
+- Známý problém (16. 11.): přehledy legionářů a Čechů v cizině ve zkouškách nenašly nic ani v běžném týdnu
+  (česká média o legionářích zápas po zápasu nepíšou; hledání „všichni Češi za týden“ je moc široké).
 
 ### Plán dál (dohodnuto s majitelem 16. 11. 2026)
 
