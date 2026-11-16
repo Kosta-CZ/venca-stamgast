@@ -486,7 +486,8 @@ async function prehled(): Promise<void> {
   if (!existsSync(file)) throw new Error(`Přehled ${id} v data/prehledy není.`);
   const cfg = JSON.parse(readFileSync(file, 'utf8')) as DigestConfig;
   const today = arg('date') ?? pragueToday();
-  if (!isActive(cfg, today)) {
+  // Období (od–do) hlídá plánované běhy; ruční běh s datem ho obchází (zkouška na minulém dni).
+  if (!arg('date') && !isActive(cfg, today)) {
     console.log(`${cfg.nazev}: mimo období (${cfg.od ?? '…'} až ${cfg.do ?? '…'}), dnes nic.`);
     output('has_post', 'false');
     output('reason', 'off');
