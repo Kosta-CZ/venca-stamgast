@@ -68,13 +68,14 @@ async function make(): Promise<void> {
   } else {
     model = process.env.VENCA_MODEL || DEFAULT_MODEL;
     const system = readFileSync(join(ROOT, 'prompts/system.md'), 'utf8');
-    const text = await askClaude({ fetch, apiKey, model }, system, userMessage(night, date));
+    const text = await askClaude({ fetch, apiKey, model }, system, userMessage(night, date), console.log);
     let raw: unknown;
     try {
       raw = parseJsonLoose(text);
     } catch (e) {
       raw = {};
       console.log(`Venca vrátil nečitelnou odpověď: ${e instanceof Error ? e.message : String(e)}`);
+      console.log(`Začátek odpovědi: ${JSON.stringify(text.slice(0, 600))}`);
     }
     venca = checkVenca(raw, night, date);
     if ((raw as { prazdne?: boolean }).prazdne) venca.pozor.push('Venca tvrdí, že nikdo nehrál, ale data říkají něco jiného.');

@@ -61,15 +61,17 @@ export interface ClaudeIo {
 export const DEFAULT_MODEL = 'claude-sonnet-5-5';
 
 /** Zavolá Claude API a vrátí text odpovědi. Klíč se nikdy nevypisuje. */
-export async function askClaude(io: ClaudeIo, system: string, user: string): Promise<string> {
+export async function askClaude(io: ClaudeIo, system: string, user: string, log: (line: string) => void = () => {}): Promise<string> {
   const res = await io.fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': io.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: io.model, max_tokens: 1200, system, messages: [{ role: 'user', content: user }] }),
+    body: JSON.stringify({ model: io.model, max_tokens: 4000, system, messages: [{ role: 'user', content: user }] }),
   });
-  const json = (await res.json().catch(() => null)) as { content?: { type: string; text?: string }[]; error?: { message?: string } } | null;
+  const json = (await res.json().catch(() => null)) as { content?: { type: string; text?: string }[]; stop_reason?: string; error?: { message?: string } } | null;
   if (!res.ok || !json) throw new Error(`Claude API odmítlo dotaz: ${json?.error?.message ?? `stav ${res.status}`}`);
-  return (json.content ?? []).filter((c) => c.type === 'text').map((c) => c.text ?? '').join('');
+  const text = (json.content ?? []).filter((c) => c.type === 'text').map((c) => c.text ?? '').join('');
+  log(`Claude (${io.model}): konec ${json.stop_reason ?? '?'}, bloky ${(json.content ?? []).map((c) => c.type).join(', ') || 'žádné'}, ${text.length} znaků textu.`);
+  return text;
 }
 
 /** JSON z odpovědi, i když ho model obalí do ``` nebo přidá větu navíc. */
