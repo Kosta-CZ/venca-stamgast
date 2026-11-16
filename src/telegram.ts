@@ -3,6 +3,7 @@
 // Token bota se nikdy nevypisuje: chyby ho maskují.
 
 import type { Draft } from './draft.ts';
+import { DIGEST_EMOJI } from './digest.ts';
 import { leagueOf } from './leagues.ts';
 
 export const TG_API = 'https://api.telegram.org';
@@ -51,6 +52,10 @@ export function approvalHeader(d: Draft): string {
     const l = leagueOf(d);
     return `${l.emoji} <b>${tgEscape(l.title)} · ${d.facts.round}. kolo</b>\n<i>${tgEscape(d.dayLabel)} · ${tgEscape(hero)} · výraz ${tgEscape(d.venca.vyraz)}</i>`;
   }
+  if (d.kind === 'prehled') {
+    const f = d.facts;
+    return `${DIGEST_EMOJI[f.sport]} <b>${tgEscape(f.nazev)} · ${tgEscape(f.periodLabel)}</b>\n<i>${f.rows.length} ${f.rows.length === 1 ? 'hráč' : f.rows.length < 5 ? 'hráči' : 'hráčů'} · hrdina: ${tgEscape(d.venca.hrdina ?? '–')} · výraz ${tgEscape(d.venca.vyraz)}</i>`;
+  }
   if (d.kind === 'special') {
     const f = d.facts;
     const what = d.stage === 'pozvanka' ? 'pozvánka' : `výsledek${f.winner ? `: vítěz ${f.winner}` : ''}`;
@@ -81,7 +86,7 @@ export function approvalText(d: Draft): string {
     : '✅ Kontrola čísel prošla.';
   const sources = d.kind === 'kotel'
     ? sourcesText(d.sources)
-    : d.kind === 'special'
+    : d.kind === 'special' || d.kind === 'prehled'
       ? sourcesText(d.facts.sources.map((url) => ({ url, games: [] })), 'Zdroje (dvě nezávislá hledání)')
       : '';
   return [approvalHeader(d), tgEscape(d.caption), sources, check].filter(Boolean).join('\n\n');

@@ -3,6 +3,7 @@
 
 import type { PostFacts } from './facts.ts';
 import type { KotelFacts } from './kotel.ts';
+import type { DigestFacts, DigestVencaOut } from './digest.ts';
 import type { KotelVencaOut } from './kotelVenca.ts';
 import { leagueOf, type LeagueId } from './leagues.ts';
 import type { Source } from './scorers.ts';
@@ -46,10 +47,18 @@ export interface SpecialDraft extends DraftBase {
   facts: SpecialFacts;
 }
 
-export type Draft = RanniPivoDraft | KotelDraft | SpecialDraft;
+/** Přehled ze dvou zdrojů: legionáři, Češi v cizině, tenis (id 2026-11-22-legionari). */
+export interface DigestDraft extends DraftBase {
+  kind: 'prehled';
+  digest: string;
+  venca: DigestVencaOut;
+  facts: DigestFacts;
+}
+
+export type Draft = RanniPivoDraft | KotelDraft | SpecialDraft | DigestDraft;
 export type DraftKind = Draft['kind'];
 
-export const KIND_LABEL: Record<DraftKind, string> = { 'ranni-pivo': 'Ranní pivo', kotel: 'Extraligový kotel', special: 'Speciál' };
+export const KIND_LABEL: Record<DraftKind, string> = { 'ranni-pivo': 'Ranní pivo', kotel: 'Extraligový kotel', special: 'Speciál', prehled: 'Přehled' };
 
 /** Id konceptu: den a druh, např. 2026-11-17-ranni-pivo nebo 2026-11-15-kotel (den kola; fotbal 2026-11-22-liga). */
 export const draftId = (date: string, kind: DraftKind): string => `${date}-${kind}`;
@@ -66,6 +75,7 @@ export function draftIdFromIssue(body: string): string | null {
 export function draftTitle(d: Draft): string {
   if (d.kind === 'kotel') return `${leagueOf(d).title} ${d.facts.round}. kolo`;
   if (d.kind === 'special') return `${KIND_LABEL.special} ${d.facts.stitek}: ${STAGE_LABEL[d.stage]}`;
+  if (d.kind === 'prehled') return `${d.facts.nazev} ${d.facts.periodLabel}`;
   return `${KIND_LABEL[d.kind]} ${d.dayLabel}`;
 }
 
@@ -79,7 +89,7 @@ export function issueBody(d: Draft): string {
   const quoted = d.caption.split('\n').map((l) => `> ${l}`).join('\n');
   const sources = d.kind === 'kotel' && d.sources.length
     ? `\n\n**Zdroje střelců**\n\n${d.sources.map((s) => `- ${s.url} (${s.games.join(', ')})`).join('\n')}`
-    : d.kind === 'special' && d.facts.sources.length
+    : (d.kind === 'special' || d.kind === 'prehled') && d.facts.sources.length
       ? `\n\n**Zdroje (dvě nezávislá hledání)**\n\n${d.facts.sources.map((u) => `- ${u}`).join('\n')}`
       : '';
   return `${DRAFT_MARK(d.id)}

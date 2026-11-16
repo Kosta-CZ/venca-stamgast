@@ -30,7 +30,14 @@ export interface DigestConfig {
   zdroje_a: string[];
   zdroje_b: string[];
   hashtagy: string[];
+  /** Období, kdy přehled běží (YYYY-MM-DD, nepovinné): mimo něj úloha nic nehledá. */
+  od?: string;
+  do?: string;
 }
+
+export const isActive = (cfg: Pick<DigestConfig, 'od' | 'do'>, today: string): boolean => (!cfg.od || today >= cfg.od) && (!cfg.do || today <= cfg.do);
+
+export const DIGEST_EMOJI: Record<DigestSport, string> = { hokej: '🏒', fotbal: '⚽', tenis: '🎾' };
 
 /** Jeden výkon v jednom zápase. Skóre je z pohledu Čecha (jeho tým nebo on první). */
 export interface Performance {
@@ -231,7 +238,7 @@ export function digestRows(sport: DigestSport, items: readonly Performance[]): D
     return items.map((p) => ({
       player: p.player,
       where: [p.competition, p.stage].filter(Boolean).join(', '),
-      detail: `${p.won ? 'porazil(a)' : 'prohrál(a) s'} ${p.opponent}`,
+      detail: `${p.won === null ? '' : p.won ? 'výhra · ' : 'prohra · '}${p.opponent}`,
       value: p.score,
       weight: (p.won ? 2 : 1),
     })).sort((a, b) => b.weight - a.weight);
@@ -379,9 +386,10 @@ export function digestDisclaimer(sources: readonly string[]): string {
   return labels.length >= 2 ? `Fiktivní AI postava. Výsledky ověřené ve dvou zdrojích: ${labels.join(', ')}.` : 'Fiktivní AI postava.';
 }
 
-/** Popisek: Venca, hráči, kteří se nevešli do grafiky, hashtagy a označení postavy. */
-export function digestCaption(v: Pick<DigestVencaOut, 'popisek' | 'hashtagy'>, f: DigestFacts, shown: number): string {
-  const hidden = f.rows.slice(shown);
+/** Popisek: Venca, hráči, kteří se nevešli do grafiky (hrdina + `maxRows` dalších), hashtagy a označení postavy. */
+export function digestCaption(v: Pick<DigestVencaOut, 'popisek' | 'hashtagy'>, f: DigestFacts, maxRows: number): string {
+  const hero = f.rows.find((r) => r.player === f.hero) ?? f.rows[0];
+  const hidden = f.rows.filter((r) => r !== hero).slice(maxRows);
   const extra = hidden.length ? `Další: ${hidden.map((r) => `${r.player} ${r.value}`).join(', ')}.` : '';
   return [v.popisek, extra, v.hashtagy.join(' '), digestDisclaimer(f.sources)].filter(Boolean).join('\n\n');
 }

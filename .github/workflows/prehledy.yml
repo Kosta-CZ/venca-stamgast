@@ -1,0 +1,147 @@
+# Přehledy ze dvou zdrojů (data/prehledy/*.json): tenis denně, legionáři a Češi ve fotbale v cizině v pondělí.
+# Výkony dohledá Claude API dvakrát nezávisle (mezinárodní a české zdroje); do grafiky jde jen to, co sedí
+# v obou. Koncept jde ke schválení do Telegramu (✅ Vydat / 🗑 Zahodit, vydává vydat.yml), nikdy nevychází sám.
+#
+# Ruční spuštění: Run workflow, vybrat přehled, volitelně den (přehled končí dnem předtím).
+
+name: Přehledy
+
+on:
+  schedule:
+    - cron: '23 8 * * *'    # tenis: 9:23 v zimě, včerejší zápasy
+    - cron: '23 9 * * 1'    # legionáři: pondělí 10:23, minulý týden
+    - cron: '23 10 * * 1'   # Češi v cizině: pondělí 11:23, minulý týden
+  workflow_dispatch:
+    inputs:
+      prehled:
+        description: 'Který přehled'
+        type: choice
+        options: [legionari, cizina, tenis]
+        default: legionari
+      date:
+        description: 'Den běhu YYYY-MM-DD (prázdné = dnes; přehled končí dnem předtím)'
+        required: false
+      send:
+        description: 'Poslat ke schválení (Telegram, jinak issue)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: prehledy-${{ github.event.schedule || inputs.prehled }}
+  cancel-in-progress: false
+
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID || secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - name: Který přehled
+        id: what
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          INPUT_ID: ${{ inputs.prehled }}
+        run: |
+          case "$SCHEDULE" in
+            '23 8 * * *') id=tenis ;;
+            '23 9 * * 1') id=legionari ;;
+            '23 10 * * 1') id=cizina ;;
+            *) id="$INPUT_ID" ;;
+          esac
+          case "$id" in legionari|cizina|tenis) ;; *) echo "::error::Neznámý přehled"; exit 1 ;; esac
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "Přehled: $id"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalace
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Výroba přehledu
+        id: make
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VENCA_MODEL: ${{ vars.VENCA_MODEL }}
+          ID: ${{ steps.what.outputs.id }}
+          DATE: ${{ inputs.date }}
+          SCHEDULED: ${{ github.event_name == 'schedule' }}
+        run: |
+          args=(--id "$ID")
+          [ -n "$DATE" ] && args+=(--date "$DATE")
+          [ "$SCHEDULED" = true ] && args+=(--skip-existing)
+          npm run -s venca -- prehled "${args[@]}"
+
+      - name: Koncept k nahlédnutí
+        if: steps.make.outputs.has_post == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: prehled-${{ steps.what.outputs.id }}
+          retention-days: 14
+          path: |
+            out/*.jpg
+            out/*.html
+            out/*.json
+
+      - name: Nahrání do úložiště
+        id: upload
+        # Zkušební běh bez odeslání nic nenahrává: koncept zůstane jen v artefaktu běhu.
+        if: steps.make.outputs.has_post == 'true' && vars.R2_PUBLIC_URL != '' && (github.event_name == 'schedule' || inputs.send)
+        run: npm run -s venca -- upload --id "${{ steps.make.outputs.id }}"
+
+      - name: Ke schválení (Telegram / issue)
+        if: steps.make.outputs.has_post == 'true' && (github.event_name == 'schedule' || inputs.send)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ID: ${{ steps.make.outputs.id }}
+          UPLOADED: ${{ steps.upload.outputs.image_url != '' }}
+        run: |
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ] && [ "$UPLOADED" = true ]; then
+            npm run -s venca -- telegram --id "$ID"
+            exit 0
+          fi
+          title="$(npm run -s venca -- issue --id "$ID" --title)"
+          if gh issue list --state open --limit 100 --json title --jq '.[].title' | grep -Fxq "$title"; then
+            echo "Issue „$title“ už je otevřené."
+            exit 0
+          fi
+          gh label create ke-schvaleni --color F5B027 --description 'Koncept čeká na /vydat' 2>/dev/null || true
+          npm run -s venca -- issue --id "$ID" > "$RUNNER_TEMP/body.md"
+          gh issue create --title "$title" --label ke-schvaleni --body-file "$RUNNER_TEMP/body.md" --assignee "${{ github.repository_owner }}"
+
+      # Týdenní přehled bez ověřeného výkonu: krátká zpráva (u tenisu je prázdný den běžný, ten mlčí).
+      - name: Nic ověřeného
+        if: steps.make.outputs.reason == 'empty' && steps.what.outputs.id != 'tenis' && (github.event_name == 'schedule' || inputs.send)
+        env:
+          NAZEV: ${{ steps.make.outputs.nazev }}
+          WHY: ${{ steps.make.outputs.why }}
+        run: |
+          npm run -s venca -- notify --text "${NAZEV}: za minulý týden nic, co by sedělo ve dvou zdrojích, dnes nic nepošlu. ${WHY}"
+
+      - name: Hlášení chyby do Telegramu
+        if: failure()
+        env:
+          ID: ${{ steps.what.outputs.id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -d node_modules ] || npm ci
+          npm run -s venca -- notify --text "❌ Přehled $ID se nepovedlo vyrobit. Podrobnosti: $RUN_URL" || true

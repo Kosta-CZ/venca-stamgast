@@ -35,6 +35,11 @@ const SOURCE_NAMES: [string, string][] = [
   ['irozhlas.cz', 'iROZHLAS'], ['aktualne.cz', 'Aktuálně'], ['denik.cz', 'Deník'], ['sport.cz', 'Sport.cz'],
   ['ufc.com', 'UFC'], ['espn.com', 'ESPN'], ['cbssports.com', 'CBS Sports'], ['mmafighting.com', 'MMA Fighting'],
   ['mmajunkie.usatoday.com', 'MMA Junkie'], ['sherdog.com', 'Sherdog'], ['tapology.com', 'Tapology'],
+  ['eliteprospects.com', 'Elite Prospects'], ['theahl.com', 'AHL'], ['shl.se', 'SHL'], ['liiga.fi', 'Liiga'], ['penny-del.org', 'DEL'],
+  ['nationalleague.ch', 'National League'], ['ice.hockey', 'ICEHL'], ['atptour.com', 'ATP'], ['wtatennis.com', 'WTA'],
+  ['ausopen.com', 'Australian Open'], ['tennis.com', 'Tennis.com'], ['cztenis.cz', 'ČTS'], ['bbc.com', 'BBC'], ['skysports.com', 'Sky Sports'],
+  ['uefa.com', 'UEFA'], ['transfermarkt.com', 'Transfermarkt'], ['bundesliga.com', 'Bundesliga'], ['premierleague.com', 'Premier League'],
+  ['fotbal.cz', 'FAČR'], ['hokej.cz', 'hokej.cz'],
 ];
 
 /** Krátký název zdroje do popisku: ceskenoviny.cz je ČTK, sport.ceskatelevize.cz je ČT sport. */

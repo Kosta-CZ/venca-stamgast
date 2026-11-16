@@ -1,0 +1,12 @@
+{
+  "_popis": "Přehled: čeští hokejisté v evropských ligách a v AHL za minulý týden (pondělí ráno). Výkony dohledá Claude dvakrát nezávisle (zdroje A mezinárodní, B české); do grafiky jde jen to, co sedí v obou. KHL nikdy.",
+  "id": "legionari",
+  "nazev": "Legionáři",
+  "sport": "hokej",
+  "obdobi_dni": 7,
+  "zadani": "Čeští hokejisté v těchto soutěžích: švédská SHL, finská Liiga, německá DEL, švýcarská National League, rakouská ICE Hockey League (ICEHL) a zámořská AHL. Jen tyto soutěže, ligové zápasy i play-off.",
+  "vyloucit": ["KHL", "Kontinentální"],
+  "zdroje_a": ["eliteprospects.com", "shl.se", "liiga.fi", "penny-del.org", "nationalleague.ch", "ice.hockey", "theahl.com"],
+  "zdroje_b": ["hokej.cz", "isport.blesk.cz", "sport.cz", "ceskenoviny.cz", "sport.ceskatelevize.cz"],
+  "hashtagy": ["#hokej", "#legionari", "#CesiVZahranici"]
+}

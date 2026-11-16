@@ -1,0 +1,14 @@
+{
+  "_popis": "Přehled: včerejší zápasy českých tenistů a tenistek ve dvouhře (denně ráno), každý výsledek ze dvou nezávislých zdrojů (A mezinárodní, B české). Běží v období od–do (zatím do konce Australian Open).",
+  "id": "tenis",
+  "nazev": "Tenis",
+  "sport": "tenis",
+  "obdobi_dni": 1,
+  "od": "2026-11-16",
+  "do": "2027-02-01",
+  "zadani": "Čeští tenisté a tenistky ve dvouhře: hlavní soutěž turnajů ATP a WTA včetně grandslamů a týmové soutěže Davis Cup, Billie Jean King Cup a United Cup. Ne kvalifikace, ne čtyřhra a ne turnaje ITF a Challenger.",
+  "vyloucit": ["challenger", "itf", "kvalifikace", "qualifying", "ctyrhra", "doubles"],
+  "zdroje_a": ["atptour.com", "wtatennis.com", "ausopen.com", "espn.com", "tennis.com"],
+  "zdroje_b": ["isport.blesk.cz", "sport.cz", "ceskenoviny.cz", "sport.ceskatelevize.cz", "cztenis.cz"],
+  "hashtagy": ["#tenis", "#CeskyTenis", "#ATP", "#WTA"]
+}

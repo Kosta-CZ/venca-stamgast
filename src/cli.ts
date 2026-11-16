@@ -5,6 +5,8 @@
 //                                                       vyrobí koncept Extraligového kotle (poslední odehrané kolo)
 //   liga     --liga extraliga|fotbal [stejné volby jako kotel, navíc --whole-round]
 //                                                       kolo ligy; --whole-round počká, dokud se kolo nedohraje
+//   prehled  --id legionari|cizina|tenis [--date YYYY-MM-DD] [--skip-existing]
+//                                                       přehled ze dvou zdrojů (data/prehledy)
 //   special  --stage pozvanka|vysledek [--event SOUBOR] [--date YYYY-MM-DD] [--no-ai] [--skip-existing]
 //                                                       speciál k velké akci z data/specialy (fakta ze dvou zdrojů)
 //   upload   --id ID                                    nahraje koncept do R2 (obrázek + JSON)
@@ -33,6 +35,8 @@ import { checkKotelVenca, fallbackKotelVenca, kotelCaption, kotelDisclaimer, kot
 import { findScorers, type Source } from './scorers.ts';
 import { seasonFor, syncRounds, tsdbGetter } from './sportsdb.ts';
 import { LEAGUES, type LeagueId } from './leagues.ts';
+import { checkDigestVenca, digestCaption, digestDisclaimer, digestUserMessage, findDigest, isActive, period, type DigestConfig } from './digest.ts';
+import { digestHtml, MAX_ROWS } from './render/digest.ts';
 import {
   checkSpecialVenca, fallbackSpecialVenca, findInvite, findResult, pickEvent, specialCaption, specialDisclaimer, specialId, specialUserMessage,
   type SpecialEvent, type SpecialFacts, type SpecialVencaOut, type Stage,
@@ -472,8 +476,82 @@ async function special(): Promise<void> {
   output('pozor', String(draft.pozor.length));
 }
 
+// Přehled ze dvou zdrojů (data/prehledy/<id>.json): legionáři, Češi v cizině, tenis. Výkony dohledá Claude
+// dvakrát nezávisle, do grafiky jde jen to, co sedí v obou.
+async function prehled(): Promise<void> {
+  mkdirSync(OUT, { recursive: true });
+  const id = arg('id');
+  if (!id || !/^[a-z-]+$/.test(id)) throw new Error('Chybí --id přehledu (legionari, cizina, tenis).');
+  const file = join(ROOT, 'data/prehledy', `${id}.json`);
+  if (!existsSync(file)) throw new Error(`Přehled ${id} v data/prehledy není.`);
+  const cfg = JSON.parse(readFileSync(file, 'utf8')) as DigestConfig;
+  const today = arg('date') ?? pragueToday();
+  if (!isActive(cfg, today)) {
+    console.log(`${cfg.nazev}: mimo období (${cfg.od ?? '…'} až ${cfg.do ?? '…'}), dnes nic.`);
+    output('has_post', 'false');
+    output('reason', 'off');
+    return;
+  }
+  const p = period(cfg, today);
+  const draftKey = `${p.to}-${cfg.id}`;
+  output('nazev', cfg.nazev);
+  const store = roundStore();
+  if (flag('skip-existing') && (await store.get(`drafts/${draftKey}.json`))) {
+    console.log(`Koncept ${draftKey} už existuje, nic nevyrábím.`);
+    output('has_post', 'false');
+    output('reason', 'exists');
+    return;
+  }
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || flag('no-ai')) throw new Error('Přehled bez Claude API dohledat nejde (chybí ANTHROPIC_API_KEY).');
+  const model = process.env.VENCA_MODEL || DEFAULT_MODEL;
+  const io: ClaudeIo = { fetch, apiKey, model };
+
+  const found = await findDigest(io, cfg, today, console.log);
+  const facts = found.facts;
+  for (const it of facts.items) console.log(`  ${it.date} ${it.player} (${it.team || it.competition}) – ${it.opponent} ${it.score}${it.goals !== null ? ` ${it.goals}+${it.assists ?? 0}` : ''}`);
+  for (const x of found.pozor) console.log(`  ⚠ ${x}`);
+  if (!facts.rows.length) {
+    const single = found.pozor.find((x) => /jen v jednom zdroji/.test(x)) ?? '';
+    console.log(`${cfg.nazev} ${facts.periodLabel}: žádný ověřený výkon, příspěvek nebude.`);
+    output('has_post', 'false');
+    output('reason', 'empty');
+    output('why', single);
+    return;
+  }
+
+  const system = readFileSync(join(ROOT, 'prompts/system.md'), 'utf8');
+  const text = await askClaude(io, system, digestUserMessage(facts), console.log);
+  let raw: unknown = {};
+  try {
+    raw = parseJsonLoose(text);
+  } catch (err) {
+    console.log(`Venca vrátil nečitelnou odpověď: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const venca = checkDigestVenca(raw, facts, cfg.hashtagy);
+  if (venca.hrdina) facts.hero = venca.hrdina;
+  const draft: Draft = {
+    id: draftKey, kind: 'prehled', digest: cfg.id, date: p.to, dayLabel: facts.periodLabel,
+    caption: digestCaption(venca, facts, MAX_ROWS), venca, facts, pozor: [...found.pozor, ...venca.pozor],
+    model, createdAt: new Date().toISOString(),
+  };
+  const html = digestHtml({ facts, venca, disclaimer: digestDisclaimer(facts.sources) });
+  writeFileSync(join(OUT, `${draftKey}.html`), html);
+  const { htmlToJpeg } = await import('./render/shot.ts');
+  await htmlToJpeg(html, SIZE, join(OUT, `${draftKey}.jpg`));
+  writeDraft(draft);
+
+  for (const r of facts.rows) console.log(`  ${r.player} | ${r.where} | ${r.detail} | ${r.value}`);
+  for (const u of facts.sources) console.log(`  zdroj ${u}`);
+  console.log(`Titulek: ${venca.titulek}\nHláška: ${venca.hlaska}\nPopisek: ${venca.popisek}`);
+  console.log(`Koncept ${draftKey}: hrdina ${venca.hrdina ?? '–'}, výraz ${venca.vyraz}, ke kontrole ${draft.pozor.length}.`);
+  output('has_post', 'true');
+  output('id', draftKey);
+  output('pozor', String(draft.pozor.length));
+}
+
 const commands: Record<string, () => Promise<void> | void> = {
-  make, kotel: () => liga('extraliga'), liga: () => liga((arg('liga') ?? 'extraliga') as LeagueId), special, upload, issue, telegram, notify, publish, refresh,
+  make, kotel: () => liga('extraliga'), liga: () => liga((arg('liga') ?? 'extraliga') as LeagueId), special, prehled, upload, issue, telegram, notify, publish, refresh,
 };
 
 const cmd = process.argv[2] ?? '';
