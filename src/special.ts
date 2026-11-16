@@ -371,16 +371,16 @@ export async function findInvite(io: ClaudeIo, e: SpecialEvent, log: (l: string)
   return { facts: res.facts, pozor: [...res.pozor, ...pozor] };
 }
 
-/** Výsledek: dvě nezávislá hledání; null, když zápas podle některého zdroje ještě neskončil. */
+/**
+ * Výsledek: dvě nezávislá hledání, ale postupně. Nejdřív mezinárodní zdroje (výsledky mají nejrychleji);
+ * když výsledek ještě nemají, české se nehledají (bez obou se nic nepotvrdí, ušetří se půlka ceny).
+ * Vrací čekání, když zápas podle některého zdroje ještě neskončil.
+ */
 export async function findResult(io: ClaudeIo, e: SpecialEvent, invite: Pick<SpecialFacts, 'czech' | 'opponent'> | undefined, log: (l: string) => void = () => {}): Promise<{ facts: SpecialFacts; pozor: string[] } | { waiting: string }> {
-  const [a, b] = await Promise.all([
-    searchGroup(io, 'A', e.zdroje_a, resultPrompt(e, e.zdroje_a), parseResult, EMPTY_RESULT, log),
-    searchGroup(io, 'B', e.zdroje_b, resultPrompt(e, e.zdroje_b), parseResult, EMPTY_RESULT, log),
-  ]);
-  if (!a.report.finished || !b.report.finished) {
-    const why = [a, b].map((x, i) => `${i ? 'české' : 'mezinárodní'} zdroje: ${x.report.finished ? 'výsledek mají' : x.report.note || 'výsledek zatím nemají'}`).join('; ');
-    return { waiting: why };
-  }
+  const a = await searchGroup(io, 'A', e.zdroje_a, resultPrompt(e, e.zdroje_a), parseResult, EMPTY_RESULT, log);
+  if (!a.report.finished) return { waiting: `mezinárodní zdroje: ${a.report.note || 'výsledek zatím nemají'}; české zdroje se zatím nehledaly` };
+  const b = await searchGroup(io, 'B', e.zdroje_b, resultPrompt(e, e.zdroje_b), parseResult, EMPTY_RESULT, log);
+  if (!b.report.finished) return { waiting: `mezinárodní zdroje: výsledek mají; české zdroje: ${b.report.note || 'výsledek zatím nemají'}` };
   const pozor: string[] = [];
   const sources = [...checkSources('Zdroje A', a.report.sources, e.zdroje_a, a.seen, pozor), ...checkSources('Zdroje B', b.report.sources, e.zdroje_b, b.seen, pozor)];
   const res = confirmResult(e, a.report, b.report, sources, invite)!;

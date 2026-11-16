@@ -130,7 +130,22 @@ describe('přehledy: dvě nezávislá hledání', () => {
     const r = await findDigest({ fetch: f as unknown as typeof fetch, apiKey: 'k', model: 'm' }, LEG, '2026-11-23');
     expect(r.errors).toEqual([expect.stringContaining('Došel kredit Claude API')]);
     expect(r.facts.rows).toEqual([]);
-    expect(limits).toEqual([16, 16]);
+    // Selhalo hned první (české) hledání, druhé se už nespouštělo.
+    expect(limits).toEqual([16]);
+  });
+
+  it('když české zdroje nic nenajdou, mezinárodní hledání se nespouští (bez dvou zdrojů se nic nepotvrdí)', async () => {
+    const domains: string[][] = [];
+    const f = vi.fn(async (_u: unknown, init?: RequestInit) => {
+      domains.push(JSON.parse(String(init?.body)).tools[0].allowed_domains);
+      return new Response(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', model: 'm', stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 }, content: [{ type: 'text', text: '{"vykony": [], "zdroje": [], "poznamka": "reprezentační pauza"}' }] }), { headers: { 'content-type': 'application/json' } });
+    });
+    const logs: string[] = [];
+    const r = await findDigest({ fetch: f as unknown as typeof fetch, apiKey: 'k', model: 'm' }, LEG, '2026-11-23', (l) => logs.push(l));
+    expect(domains).toEqual([LEG.zdroje_b]);
+    expect(r.errors).toEqual([]);
+    expect(r.facts.rows).toEqual([]);
+    expect(logs.join(' ')).toContain('mezinárodní hledání vynechávám');
   });
 });
 

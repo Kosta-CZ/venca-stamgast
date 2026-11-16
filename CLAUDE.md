@@ -95,7 +95,8 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
   pozvánka 13:23, výsledek 23:23, záloha 0:53. Bible má sekci 8 o MMA (bez posměchu knockoutům a zraněním, respekt
   k soupeři, MMA jen u velkých zápasů Čechů); kód navíc hlídá rizikové výrazy (`MMA_TABOO`) a u výsledku nepustí výraz vztek.
 - Fakta: dvě hledání (`zdroje_a` mezinárodní, `zdroje_b` české), každý údaj musí sedět v obou, odkazy musí být
-  z povolených webů a z výsledků hledání. Časy převádí kód (`toPrague`), ne AI.
+  z povolených webů a z výsledků hledání. Časy převádí kód (`toPrague`), ne AI. U výsledku se hledá postupně
+  (české zdroje jen když mezinárodní výsledek už mají).
 - Další akce = nový JSON v `data/specialy/` a řádky `cron` ve `specialy.yml`. Zkouška celé cesty na minulém zápase:
   `zkouska-2026-04-11-ufc327` (ručně, bez odeslání).
 
@@ -104,10 +105,19 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
 - **1. liga** (`fotbal.yml`): pondělí 7:53 (čeká, až se kolo dohraje), záloha v úterý; kolo starší než 3 dny
   (po reprezentační pauze) se neposílá. TheSportsDB liga 4631, kola v R2 `liga/<sezóna>/`, id `<den>-liga`.
   Tabulka po 14. kole sedí s ČTK (test). Nadstavba po 30. kole (skupiny) zatím počítaná není.
-- **Přehledy** (`prehledy.yml`): tenis denně 9:23 je od 17. 11. vypnutý kvůli ceně (rozhodnutí majitele; v
-  `data/prehledy/tenis.json` je období do konce Australian Open, zapíná se řádkem `cron`), legionáři (SHL, Liiga, DEL, National League, ICEHL, AHL; **KHL nikdy**) a Češi v cizině v pondělí.
+- **Přehledy** (`prehledy.yml`): legionáři (SHL, Liiga, DEL, National League, ICEHL, AHL; **KHL nikdy**) a Češi
+  v cizině v pondělí. Tenis denně 9:23 je od 17. 11. vypnutý kvůli ceně (rozhodnutí majitele; v
+  `data/prehledy/tenis.json` je období do konce Australian Open, zapíná se řádkem `cron`).
   Volná strukturovaná data k nim nejsou: výkony dohledá Claude dvakrát nezávisle (zdroje A mezinárodní,
   B české) a do grafiky jde jen to, co sedí v obou (hráč, den ±1, soupeř, skóre, góly/asistence, výsledek).
+  Kvůli ceně postupně: nejdřív B, A jen když B něco našlo (A o výsledcích B neví).
+
+### Cena (měřeno 16. 11. 2026, Claude API, data jsou zdarma)
+
+- Log každého běhu ukazuje tokeny a cenu, koncept ji nese v `costUsd` a zpráva ke schválení ji ukáže („💰“).
+- Hledání posílá `cache_control` (opakované čtení nalezeného za 5 % ceny). Kolo ligy/Kotel asi 7–8 Kč
+  (hledání střelců ~$0.31, texty ~$0.03), Ranní pivo pod 1 Kč, prázdný přehled ~5 Kč, plný víc (každé hledání
+  $0.01). Výsledek speciálu: nejdřív mezinárodní zdroje, české jen když výsledek už mají.
 
 ### Plán dál (dohodnuto s majitelem 16. 11. 2026)
 

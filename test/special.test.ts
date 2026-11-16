@@ -155,6 +155,9 @@ describe('speciál: dva nezávislé zdroje', () => {
     }), { headers: { 'content-type': 'application/json' } }));
     const r = await findResult({ fetch: f as unknown as typeof fetch, apiKey: 'k', model: 'x' }, EVENT, undefined);
     expect('waiting' in r && r.waiting).toContain('zápas ještě běží');
+    // Mezinárodní zdroje výsledek nemají, české se kvůli úspoře už nehledaly.
+    expect(f).toHaveBeenCalledTimes(1);
+    expect('waiting' in r && r.waiting).toContain('české zdroje se zatím nehledaly');
   });
 
   it('JSON z hledání: nenalezený zápas', () => {

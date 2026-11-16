@@ -294,10 +294,17 @@ async function searchGroup(io: ClaudeIo, label: string, cfg: DigestConfig, domai
 /**
  * Celý přehled: dvě nezávislá hledání, porovnání a řádky do grafiky. `errors` nese hledání,
  * která selhala (bez obou hledání se nic potvrdit nedá, úloha to má hlásit jako chybu).
+ *
+ * Hledá se postupně: nejdřív české zdroje (B). Když nenajdou nic (nebo selžou), mezinárodní (A)
+ * se nespouští, protože bez obou zdrojů se stejně nic nepotvrdí; prázdný týden tak stojí půlku.
+ * A o výsledcích B nic neví, hledání zůstávají nezávislá.
  */
 export async function findDigest(io: ClaudeIo, cfg: DigestConfig, today: string, log: (l: string) => void = () => {}): Promise<{ facts: DigestFacts; pozor: string[]; errors: string[] }> {
   const p = period(cfg, today);
-  const [a, b] = await Promise.all([searchGroup(io, 'A', cfg, cfg.zdroje_a, p, log), searchGroup(io, 'B', cfg, cfg.zdroje_b, p, log)]);
+  const b = await searchGroup(io, 'B', cfg, cfg.zdroje_b, p, log);
+  const skipA = Boolean(b.error) || b.report.items.length === 0;
+  if (skipA) log('[A] České zdroje nic nenašly, mezinárodní hledání vynechávám (bez dvou zdrojů se nic nepotvrdí).');
+  const a: GroupResult = skipA ? { report: { ...EMPTY }, seen: [] } : await searchGroup(io, 'A', cfg, cfg.zdroje_a, p, log);
   const pozor: string[] = [];
   const sources = [...goodSources('Zdroje A', a.report.sources, cfg.zdroje_a, a.seen, pozor), ...goodSources('Zdroje B', b.report.sources, cfg.zdroje_b, b.seen, pozor)];
   const c = confirmDigest(cfg, a.report, b.report, p);
