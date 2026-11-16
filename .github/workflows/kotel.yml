@@ -118,7 +118,10 @@ jobs:
 
       - name: Tento týden bez nového kola
         if: steps.make.outputs.reason == 'exists' && github.event.schedule == '41 6 * * 6'
-        run: npm run -s venca -- notify --text "Extraligový kotel: od minulé soboty se nehrálo žádné nové kolo (poslední je ${{ steps.make.outputs.round }}. kolo), dnes nic nepošlu. 🏒"
+        env:
+          ROUND: ${{ steps.make.outputs.round }}
+        run: |
+          npm run -s venca -- notify --text "Extraligový kotel: od minulé soboty se nehrálo žádné nové kolo (poslední je ${ROUND}. kolo), dnes nic nepošlu. 🏒"
 
       - name: Hlášení chyby do Telegramu
         if: failure()
