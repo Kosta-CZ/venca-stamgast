@@ -401,7 +401,7 @@ async function special(): Promise<void> {
       facts = r.facts;
       pozor.push(...r.pozor);
     } else {
-      facts = { stage, akce: e.akce, sport: e.sport, stitek: e.stitek, datum: e.datum, dayLabel: dayLabel(e.datum), czech: { name: e.cech, record: null }, opponent: { name: e.souper, record: null }, rows: [{ label: 'Akce', value: e.akce }], sources: [] };
+      facts = { stage, akce: e.akce, popis: e.zadani, sport: e.sport, stitek: e.stitek, datum: e.datum, dayLabel: dayLabel(e.datum), czech: { name: e.cech, record: null }, opponent: { name: e.souper, record: null }, rows: [{ label: 'Akce', value: e.akce }], sources: [] };
       pozor.push('Fakta chybí: bez klíče ANTHROPIC_API_KEY se nehledají.');
     }
   } else {

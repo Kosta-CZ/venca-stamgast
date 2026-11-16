@@ -9,7 +9,7 @@
   "souper": "Navajo Stirling",
   "zadani": "hlavní zápas večera UFC Fight Night v katarském Dauhá v sobotu 21. listopadu 2026, Jiří Procházka (Česko) proti Navaju Stirlingovi",
   "pasmo": "Asia/Qatar",
-  "zdroje_a": ["ufc.com", "espn.com", "cbssports.com", "mmafighting.com", "mmajunkie.usatoday.com", "sherdog.com"],
-  "zdroje_b": ["isport.blesk.cz", "sport.cz", "idnes.cz", "ceskenoviny.cz", "sport.ceskatelevize.cz", "irozhlas.cz", "aktualne.cz"],
+  "zdroje_a": ["ufc.com", "espn.com", "cbssports.com", "mmajunkie.usatoday.com", "sherdog.com"],
+  "zdroje_b": ["isport.blesk.cz", "sport.cz", "ceskenoviny.cz", "sport.ceskatelevize.cz", "irozhlas.cz", "aktualne.cz"],
   "hashtagy": ["#UFC", "#Prochazka", "#MMA", "#UFCDoha"]
 }

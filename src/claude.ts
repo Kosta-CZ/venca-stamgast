@@ -87,14 +87,25 @@ export function finalText(blocks: readonly Block[]): string {
 }
 
 /**
+ * Weby, které API odmítne, protože blokují vyhledávacího robota Anthropicu
+ * („The following domains are not accessible to our user agent: ['idnes.cz']“).
+ */
+export function blockedDomains(err: unknown): string[] {
+  const m = /domains are not accessible to our user agent: \[([^\]]*)\]/.exec(err instanceof Error ? err.message : String(err));
+  return m ? [...(m[1] ?? '').matchAll(/['"]([^'"]+)['"]/g)].map((x) => x[1]!).filter(Boolean) : [];
+}
+
+/**
  * Dotaz s vyhledáváním (web_search) a stahováním stránek (web_fetch), obojí jen na `domains`.
- * Dlouhé hledání API přeruší (`pause_turn`): odpověď se pošle zpátky a pokračuje se, nejvýš 5×.
+ * Web, který vyhledávání blokuje, se vyřadí a hledá se bez něj. Dlouhé hledání API přeruší
+ * (`pause_turn`): odpověď se pošle zpátky a pokračuje se, nejvýš 5×.
  */
 export async function askWithSearch(io: ClaudeIo, ask: SearchAsk, log: (line: string) => void = () => {}): Promise<SearchAnswer> {
   const c = client(io, 2);
-  const tools = [
-    { type: 'web_search_20260209' as const, name: 'web_search' as const, max_uses: ask.maxSearches ?? 8, allowed_domains: ask.domains },
-    { type: 'web_fetch_20260209' as const, name: 'web_fetch' as const, max_uses: ask.maxFetches ?? 8, allowed_domains: ask.domains, max_content_tokens: 40000 },
+  let domains = [...ask.domains];
+  const tools = () => [
+    { type: 'web_search_20260209' as const, name: 'web_search' as const, max_uses: ask.maxSearches ?? 8, allowed_domains: domains },
+    { type: 'web_fetch_20260209' as const, name: 'web_fetch' as const, max_uses: ask.maxFetches ?? 8, allowed_domains: domains, max_content_tokens: 40000 },
   ];
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: ask.user }];
   const all: Block[] = [];
@@ -102,15 +113,27 @@ export async function askWithSearch(io: ClaudeIo, ask: SearchAsk, log: (line: st
   let fetches = 0;
   let m: Message | undefined;
   for (let turn = 0; turn < 6; turn++) {
-    m = await c.beta.messages.create({
-      model: io.model,
-      max_tokens: 16000,
-      system: ask.system,
-      messages,
-      tools,
-      betas: BETAS,
-      fallbacks: 'default',
-    });
+    try {
+      m = await c.beta.messages.create({
+        model: io.model,
+        max_tokens: 16000,
+        system: ask.system,
+        messages,
+        tools: tools(),
+        betas: BETAS,
+        fallbacks: 'default',
+      });
+    } catch (err) {
+      const blocked = blockedDomains(err);
+      const left = domains.filter((d) => !blocked.includes(d));
+      if (!all.length && blocked.length && left.length && left.length < domains.length) {
+        log(`Weby ${blocked.join(', ')} blokují vyhledávání Claude, hledám bez nich.`);
+        domains = left;
+        turn--;
+        continue;
+      }
+      throw err;
+    }
     all.push(...m.content);
     searches += m.usage.server_tool_use?.web_search_requests ?? 0;
     fetches += m.usage.server_tool_use?.web_fetch_requests ?? 0;

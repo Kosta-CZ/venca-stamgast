@@ -9,7 +9,7 @@
   "souper": "Carlos Ulberg",
   "zadani": "zápas o uvolněný titul UFC v polotěžké váze na turnaji UFC 327 v Miami 11. dubna 2026, Jiří Procházka (Česko) proti Carlosi Ulbergovi",
   "pasmo": "America/New_York",
-  "zdroje_a": ["ufc.com", "espn.com", "cbssports.com", "mmafighting.com", "mmajunkie.usatoday.com", "sherdog.com"],
-  "zdroje_b": ["isport.blesk.cz", "sport.cz", "idnes.cz", "ceskenoviny.cz", "sport.ceskatelevize.cz", "irozhlas.cz", "aktualne.cz"],
+  "zdroje_a": ["ufc.com", "espn.com", "cbssports.com", "mmajunkie.usatoday.com", "sherdog.com"],
+  "zdroje_b": ["isport.blesk.cz", "sport.cz", "ceskenoviny.cz", "sport.ceskatelevize.cz", "irozhlas.cz", "aktualne.cz"],
   "hashtagy": ["#UFC", "#Prochazka", "#MMA"]
 }

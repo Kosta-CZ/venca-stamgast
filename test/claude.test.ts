@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { askClaude, askWithSearch, normalizeUrl, onDomains } from '../src/claude.ts';
+import { askClaude, askWithSearch, blockedDomains, normalizeUrl, onDomains } from '../src/claude.ts';
 import { SCORER_DOMAINS } from '../src/scorers.ts';
 
 const usage = (search = 0, fetch = 0) => ({ input_tokens: 10, output_tokens: 5, server_tool_use: { web_search_requests: search, web_fetch_requests: fetch } });
@@ -52,6 +52,24 @@ describe('Claude API', () => {
     for (const t of tools) expect(t.allowed_domains).toEqual(['ceskenoviny.cz', 'hokej.cz', 'sport.ceskatelevize.cz']);
     const second = calls[1]!.body.messages as { role: string }[];
     expect(second.map((m) => m.role)).toEqual(['user', 'assistant']);
+  });
+
+  it('web, který blokuje vyhledávání Claude, se vyřadí a hledá se bez něj', async () => {
+    const calls: string[][] = [];
+    const f = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { tools: { allowed_domains: string[] }[] };
+      calls.push(body.tools[0]!.allowed_domains);
+      if (calls.length === 1) {
+        return new Response(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: "The following domains are not accessible to our user agent: ['idnes.cz']. Read more: https://support.anthropic.com/x" } }), { status: 400, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify(message([{ type: 'text', text: '{}' }], 'end_turn')), { headers: { 'content-type': 'application/json' } });
+    });
+    const logs: string[] = [];
+    const a = await askWithSearch({ fetch: f as unknown as typeof fetch, apiKey: 'k', model: 'm' }, { system: 's', user: 'u', domains: ['idnes.cz', 'sport.cz'] }, (l) => logs.push(l));
+    expect(a.text).toBe('{}');
+    expect(calls).toEqual([['idnes.cz', 'sport.cz'], ['sport.cz']]);
+    expect(logs.join(' ')).toContain('idnes.cz');
+    expect(blockedDomains(new Error(`400 {"message":"The following domains are not accessible to our user agent: ['a.cz', 'b.com']."}`))).toEqual(['a.cz', 'b.com']);
   });
 
   it('domény a porovnání adres', () => {

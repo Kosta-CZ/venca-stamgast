@@ -199,6 +199,8 @@ export function checkSources(label: string, sources: readonly string[], domains:
 export interface SpecialFacts {
   stage: Stage;
   akce: string;
+  /** Popis zápasu z popisu akce (pro Vencu: např. že jde o hlavní zápas večera). */
+  popis: string;
   sport: string;
   stitek: string;
   datum: string;
@@ -212,7 +214,7 @@ export interface SpecialFacts {
   sources: string[];
 }
 
-const base = (e: SpecialEvent, stage: Stage) => ({ stage, akce: e.akce, sport: e.sport, stitek: e.stitek, datum: e.datum, dayLabel: dayLabel(e.datum) });
+const base = (e: SpecialEvent, stage: Stage) => ({ stage, akce: e.akce, popis: e.zadani, sport: e.sport, stitek: e.stitek, datum: e.datum, dayLabel: dayLabel(e.datum) });
 
 /** Pozvánka z obou hledání: potvrzené údaje do grafiky, rozpory do pozor. */
 export function confirmInvite(e: SpecialEvent, a: InviteReport, b: InviteReport, sources: string[]): { facts: SpecialFacts; pozor: string[] } {
@@ -386,6 +388,7 @@ export interface SpecialVencaOut {
 export function specialUserMessage(f: SpecialFacts): string {
   const data = {
     akce: f.akce,
+    zapas: f.popis,
     sport: f.sport,
     den: f.dayLabel,
     cech: f.czech,
