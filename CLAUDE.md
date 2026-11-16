@@ -58,3 +58,24 @@ Prague“), převádí se vlastní tabulkou. API-Sports (`API_SPORTS_KEY`) by um
 jen placeně (Free má 2022–2024). Co který zdroj vrací, ukáže ruční úloha `zdroje.yml` (`scripts/sources-free.mjs`,
 `scripts/sources.mjs`).
 Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická stránka čtoucí koncepty z R2).
+
+### Extraligový kotel (rozpracovaný)
+
+- Hotovo: tvary dat a kontroly (`src/kotel.ts`: skóre, střelci proti skóre, body 3-2-1-0, tabulka z výsledků),
+  šablona (`src/render/kotel.ts`) a ukázka z 19. kola podle ČTK (`src/kotelSample.ts`, `npm run venca -- kotel --demo`).
+- Další krok jsou data. Výsledky kola dodá TheSportsDB (pomalu kvůli 429; kola se ukládají do R2 a tabulka se počítá
+  z nich; názvy týmů převádí vlastní tabulka). Střelce dohledá Claude API s nástrojem web search (jen české zdroje:
+  ceskenoviny.cz, hokej.cz, sport.ceskatelevize.cz…) jako JSON s odkazy na zdroje. `checkScorers` je porovná se skóre,
+  rozpory jdou do `pozor` a odkazy do zprávy v Telegramu. Pravidlo 1 má tak jednu výjimku (majitel souhlasil): střelce
+  dodává AI ze zpráv, kód je ale vždy porovná s výsledkem.
+- Vychází v sobotu ráno (poslední kolo a tabulka) a schvaluje se v Telegramu jako Ranní pivo.
+
+### Plán dál (dohodnuto s majitelem 16. 11. 2026)
+
+- Speciál k zápasu Jiřího Procházky (UFC, sobota 21. 11. večer, Dauhá, soupeř Navajo Stirling): odpoledne pozvánka,
+  po zápase výsledek, který musí sedět ve dvou zdrojích. Do bible: MMA bez posměchu knockoutům a zraněním, k soupeři
+  respekt; MMA jen u velkých zápasů Čechů.
+- Potom hokejoví legionáři (Švédsko, Finsko, Německo, Švýcarsko, Rakousko, AHL; **KHL nikdy**), tenis do Australian
+  Open (každý výsledek ze dvou zdrojů, do bible přibude tenis) a fotbal v cizině.
+- Výsledky z víkendu vycházejí hned (v neděli večer nebo v pondělí ráno). Do týdne se rozkládají jen příspěvky
+  nezávislé na čase (vzpomínky, kvíz, Venca vs. Jarda).

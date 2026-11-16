@@ -19,6 +19,9 @@ import { askClaude, caption, checkVenca, dayLabel, DEFAULT_MODEL, fallbackVenca,
 import { draftId, issueBody, issueTitle, type Draft } from './draft.ts';
 import { ranniPivoHtml, SIZE } from './render/ranniPivo.ts';
 import { SAMPLE_DATE, SAMPLE_NIGHT, SAMPLE_VENCA } from './sample.ts';
+import { checkScorers } from './kotel.ts';
+import { SAMPLE_KOTEL, SAMPLE_KOTEL_VENCA } from './kotelSample.ts';
+import { kotelHtml } from './render/kotel.ts';
 import { checkImage, publishImage, prepareContainer, refreshToken } from './instagram.ts';
 import { putObject, r2FromEnv } from './storage.ts';
 import { sendApproval, sendNote, tgEscape, tgFromEnv } from './telegram.ts';
@@ -222,7 +225,21 @@ async function refresh(): Promise<void> {
   console.log(`Token ${r.changed ? 'je nový' : 'zůstává'}, platí ještě ${r.days ?? '∞'} dní.`);
 }
 
-const commands: Record<string, () => Promise<void> | void> = { make, upload, issue, telegram, notify, publish, refresh };
+// Extraligový kotel: zatím jen ukázka z 19. kola (--demo), napojení na data přijde.
+async function kotel(): Promise<void> {
+  if (!flag('demo')) throw new Error('Kotel zatím umí jen ukázku: npm run venca -- kotel --demo');
+  mkdirSync(OUT, { recursive: true });
+  const problems = SAMPLE_KOTEL.games.flatMap(checkScorers);
+  if (problems.length) console.log(`Ke kontrole:\n${problems.join('\n')}`);
+  const html = kotelHtml({ facts: SAMPLE_KOTEL, venca: SAMPLE_KOTEL_VENCA });
+  const id = `kotel-${SAMPLE_KOTEL.round}-demo`;
+  writeFileSync(join(OUT, `${id}.html`), html);
+  const { htmlToJpeg } = await import('./render/shot.ts');
+  await htmlToJpeg(html, SIZE, join(OUT, `${id}.jpg`));
+  console.log(`Ukázka Kotle: out/${id}.jpg`);
+}
+
+const commands: Record<string, () => Promise<void> | void> = { make, kotel, upload, issue, telegram, notify, publish, refresh };
 
 const cmd = process.argv[2] ?? '';
 const run = commands[cmd];
