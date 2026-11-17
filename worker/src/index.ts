@@ -3,6 +3,10 @@
 // 🗑 Zahodit jen uklidí tlačítka. Poslouchá jen majitele (TELEGRAM_CHAT_ID) a jen zprávy,
 // které opravdu poslal Telegram (tajná hlavička webhooku, odvozená z tokenu bota).
 //
+// Je to i plánovač: podle rozvrhu PLAN spouští úlohy v GitHubu (Ranní pivo, Kotel, 1. liga, přehledy,
+// speciály). Plánované běhy GitHubu (on: schedule) se v tomto repozitáři nespouštěly vůbec (17. 11. 2026
+// ráno nic), Cloudflare Cron Trigger je spolehlivý a zdarma.
+//
 // Nasazuje ho úloha .github/workflows/bot.yml, ta mu nahraje i tajné údaje a nastaví webhook.
 
 export interface Env {
@@ -63,9 +67,9 @@ async function tg(env: Env, method: string, body: Record<string, unknown>): Prom
 const reply = (env: Env, msg: TgMessage, text: string, extra: Record<string, unknown> = {}) =>
   tg(env, 'sendMessage', { chat_id: msg.chat.id, text, reply_parameters: { message_id: msg.message_id, allow_sending_without_reply: true }, ...extra });
 
-/** Spustí v GitHubu vydání konceptu; úloha pak sama odpoví do Telegramu. */
-export async function dispatchPublish(env: Env, id: string, chatId: number, messageId: number): Promise<{ ok: boolean; status: number }> {
-  const res = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO}/actions/workflows/vydat.yml/dispatches`, {
+/** Spustí v GitHubu úlohu (workflow_dispatch) na větvi main se vstupy. */
+export async function dispatchWorkflow(env: Env, workflow: string, inputs: Record<string, string | boolean>): Promise<{ ok: boolean; status: number }> {
+  const res = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO}/actions/workflows/${workflow}/dispatches`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.BOT_GITHUB_TOKEN}`,
@@ -74,9 +78,84 @@ export async function dispatchPublish(env: Env, id: string, chatId: number, mess
       'User-Agent': 'venca-bot',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ ref: 'main', inputs: { id, dry_run: false, tg_chat: String(chatId), tg_message: String(messageId) } }),
+    body: JSON.stringify({ ref: 'main', inputs }),
   });
   return { ok: res.status === 204 || res.ok, status: res.status };
+}
+
+/** Spustí v GitHubu vydání konceptu; úloha pak sama odpoví do Telegramu. */
+export const dispatchPublish = (env: Env, id: string, chatId: number, messageId: number) =>
+  dispatchWorkflow(env, 'vydat.yml', { id, dry_run: false, tg_chat: String(chatId), tg_message: String(messageId) });
+
+// ---- Rozvrh ----
+
+export interface PlanEntry {
+  /** Kdy (cron v UTC: minuta hodina den měsíc den_v_týdnu; čísla, čárky, rozsahy a *). */
+  cron: string;
+  workflow: string;
+  /** Další vstupy úlohy; `plan` (= cron) se přidá vždy, podle něj úloha pozná plánovaný běh. */
+  inputs?: Record<string, string>;
+  /** Pro lidi: co a kdy našeho času (v zimě UTC+1). */
+  note: string;
+}
+
+/**
+ * Rozvrh úloh. Minuty musí být v `triggers.crons` ve worker/wrangler.jsonc (bot se budí jen v těch
+ * minutách). Nová akce (speciál) = nový řádek tady; v létě se čas našeho času posune o hodinu.
+ */
+export const PLAN: PlanEntry[] = [
+  { cron: '10 6 * * *', workflow: 'ranni-pivo.yml', note: 'Ranní pivo denně 7:10' },
+  { cron: '41 6 * * 6', workflow: 'kotel.yml', note: 'Extraligový kotel sobota 7:41' },
+  { cron: '41 9 * * 6', workflow: 'kotel.yml', note: 'Kotel záloha sobota 10:41' },
+  { cron: '53 6 * * 1', workflow: 'fotbal.yml', note: '1. liga pondělí 7:53' },
+  { cron: '53 6 * * 2', workflow: 'fotbal.yml', note: '1. liga záloha úterý 7:53' },
+  { cron: '23 10 * * 1', workflow: 'prehledy.yml', inputs: { prehled: 'cizina' }, note: 'Češi v cizině pondělí 11:23' },
+  // Procházka v UFC, sobota 21. 11. 2026 (hlavní karta 19:00 našeho času).
+  { cron: '23 12 21 11 *', workflow: 'specialy.yml', inputs: { stage: 'pozvanka' }, note: 'Procházka pozvánka 13:23' },
+  { cron: '23 22 21 11 *', workflow: 'specialy.yml', inputs: { stage: 'vysledek' }, note: 'Procházka výsledek 23:23' },
+  { cron: '53 23 21 11 *', workflow: 'specialy.yml', inputs: { stage: 'vysledek' }, note: 'Procházka výsledek záloha 0:53' },
+];
+
+/** Sedí hodnota na pole cronu („*“, „5“, „1,3“, „1-5“, „*\/10“)? */
+function fieldMatches(field: string, value: number): boolean {
+  return field.split(',').some((part) => {
+    const [range, stepText] = part.split('/');
+    const step = stepText ? Number(stepText) : 1;
+    let lo: number;
+    let hi: number;
+    if (range === '*') {
+      lo = 0;
+      hi = 59;
+    } else if (range!.includes('-')) {
+      [lo, hi] = range!.split('-').map(Number) as [number, number];
+    } else {
+      lo = hi = Number(range);
+    }
+    return value >= lo && value <= hi && (value - lo) % step === 0;
+  });
+}
+
+/** Odpovídá čas (UTC) cronu? Den v měsíci i v týdnu se kontrolují oba (rozvrh nikdy neomezuje oba zároveň). */
+export function cronMatches(cron: string, at: Date): boolean {
+  const [min, hour, dom, month, dow] = cron.trim().split(/\s+/);
+  if (!min || !hour || !dom || !month || !dow) return false;
+  return fieldMatches(min, at.getUTCMinutes()) && fieldMatches(hour, at.getUTCHours()) && fieldMatches(dom, at.getUTCDate())
+    && fieldMatches(month, at.getUTCMonth() + 1) && fieldMatches(dow, at.getUTCDay());
+}
+
+/** Co se má spustit v danou minutu. */
+export const dueAt = (at: Date): PlanEntry[] => PLAN.filter((p) => cronMatches(p.cron, at));
+
+/** Plánované spuštění: úlohy z rozvrhu; když GitHub úlohu nespustí, dá bot vědět majiteli. */
+export async function runPlan(at: Date, env: Env): Promise<string[]> {
+  const done: string[] = [];
+  for (const p of dueAt(at)) {
+    const r = await dispatchWorkflow(env, p.workflow, { ...p.inputs, plan: p.cron });
+    console.log(`Plán ${p.note}: ${p.workflow} ${r.ok ? 'spuštěno' : `GitHub ${r.status}`}`);
+    if (r.ok) done.push(p.workflow);
+    else await tg(env, 'sendMessage', { chat_id: env.TELEGRAM_CHAT_ID, text: `❌ ${p.note}: úlohu ${p.workflow} se nepodařilo spustit (GitHub odpověděl ${r.status}). Zkontroluj BOT_GITHUB_TOKEN.` });
+  }
+  return done;
 }
 
 export async function handleUpdate(update: TgUpdate, env: Env): Promise<void> {
@@ -132,6 +211,11 @@ export async function handleUpdate(update: TgUpdate, env: Env): Promise<void> {
 }
 
 export default {
+  /** Cloudflare Cron Trigger (worker/wrangler.jsonc): v plánovanou minutu spustí úlohy z rozvrhu. */
+  async scheduled(event: { scheduledTime: number; cron: string }, env: Env, ctx: Ctx): Promise<void> {
+    ctx.waitUntil(runPlan(new Date(event.scheduledTime), env).catch((e: unknown) => console.log(`Chyba plánu: ${e instanceof Error ? e.message : String(e)}`)));
+  },
+
   async fetch(req: Request, env: Env, ctx: Ctx): Promise<Response> {
     const url = new URL(req.url);
     if (req.method === 'GET' && url.pathname === '/') return new Response('Venca bot běží.');

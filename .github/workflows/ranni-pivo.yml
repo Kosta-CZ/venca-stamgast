@@ -9,9 +9,8 @@
 name: Ranní pivo
 
 on:
-  schedule:
-    # 6:10 UTC = 7:10 v zimě, 8:10 v létě: zápasy na západním pobřeží už jsou dohrané.
-    - cron: '10 6 * * *'
+  # Plán (6:10 UTC = 7:10 v zimě, 8:10 v létě: zápasy na západním pobřeží už jsou dohrané) spouští bot
+  # venca-bot podle rozvrhu PLAN ve worker/src/index.ts se vstupem plan (on: schedule se tu nespouštěl).
   workflow_dispatch:
     inputs:
       date:
@@ -21,6 +20,10 @@ on:
         description: 'Texty od Vency (Claude API)'
         type: boolean
         default: true
+      plan:
+        description: 'Plánovaný běh (vyplňuje bot podle rozvrhu; ručně nech prázdné)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -35,6 +38,8 @@ jobs:
   make:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      PLAN: ${{ github.event.schedule || inputs.plan }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,7 +56,7 @@ jobs:
       - name: Výroba příspěvku
         id: make
         env:
-          ANTHROPIC_API_KEY: ${{ (github.event_name == 'schedule' || inputs.ai) && secrets.ANTHROPIC_API_KEY || '' }}
+          ANTHROPIC_API_KEY: ${{ (env.PLAN != '' || inputs.ai) && secrets.ANTHROPIC_API_KEY || '' }}
           VENCA_MODEL: ${{ vars.VENCA_MODEL }}
           DATE: ${{ inputs.date }}
         run: |
@@ -89,7 +94,7 @@ jobs:
           ID: ${{ steps.make.outputs.id }}
           POZOR: ${{ steps.make.outputs.pozor }}
           UPLOADED: ${{ steps.upload.outputs.image_url != '' }}
-          AUTO: ${{ vars.AUTO_RANNI_PIVO == 'true' }}
+          AUTO: ${{ vars.AUTO_RANNI_PIVO == 'true' && env.PLAN != '' }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -146,7 +151,7 @@ jobs:
   # Token Instagramu platí 60 dní: každé ráno se prodlouží. Nový token uloží úloha sama jen
   # s tajemstvím SOCIAL_ADMIN_TOKEN (osobní token GitHubu s právem na Secrets), jinak dá vědět issue.
   token:
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || inputs.plan != ''
     runs-on: ubuntu-latest
     steps:
       - name: Je token nastavený?

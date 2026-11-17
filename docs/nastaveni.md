@@ -1,8 +1,9 @@
 # Nastavení (jednorázově, majitel)
 
 Úlohy běží v GitHub Actions. Repozitář je veřejný, takže běhy jsou zdarma a nečerpají minuty
-soukromých repozitářů (Pub League). Tajné údaje jsou jen v **Settings → Secrets and variables →
-Actions**, nikdy v kódu ani v chatu.
+soukromých repozitářů (Pub League). Kdy která úloha běží, určuje rozvrh bota `venca-bot` (Cloudflare,
+`PLAN` ve `worker/src/index.ts`): plánované běhy GitHubu se v tomto repozitáři nespouštěly.
+Tajné údaje jsou jen v **Settings → Secrets and variables → Actions**, nikdy v kódu ani v chatu.
 
 ## Co kam patří
 
@@ -23,7 +24,7 @@ Actions**, nikdy v kódu ani v chatu.
 | Variable (nebo Secret) | `TELEGRAM_CHAT_ID` | Tvoje Telegram ID (číslo): jen ty smíš schvalovat. |
 | Secret | `CLOUDFLARE_API_TOKEN` | Token Cloudflare (šablona „Edit Cloudflare Workers“) pro nasazení bota. |
 | Variable | `CLOUDFLARE_ACCOUNT_ID` | Id účtu Cloudflare. |
-| Secret | `BOT_GITHUB_TOKEN` | Token GitHubu jen s právem **Actions** na tento repozitář: bot jím spouští vydání. |
+| Secret | `BOT_GITHUB_TOKEN` | Token GitHubu jen s právem **Actions** na tento repozitář: bot jím spouští vydání a podle rozvrhu i všechny ranní a víkendové úlohy. |
 | Secret | `API_SPORTS_KEY` | Klíč z api-sports.io (Account → My Access), jeden pro fotbal i hokej. Tarif Free má jen sezóny 2022–2024, na aktuální je potřeba placený. Co klíč vrací, ukáže ruční úloha **Zdroje dat (kontrola)**. |
 
 ## 1. Instagram @venca_stamgast
@@ -101,7 +102,7 @@ Nic nového se nenastavuje: Kotel používá stejné klíče jako Ranní pivo (C
 ## 7. Speciál k velké akci (Procházka v UFC a další)
 
 Taky bez nového nastavení. Akce se popisuje souborem v `data/specialy/` (kdo, proti komu, kdy, pásmo místa
-a dvě skupiny zdrojů) a v `.github/workflows/specialy.yml` dostane řádky `cron`.
+a dvě skupiny zdrojů) a v rozvrhu bota (`PLAN` ve `worker/src/index.ts`) dostane své časy.
 
 - **Procházka – Stirling, sobota 21. 11. 2026** (hlavní karta v 19:00 našeho času): pozvánka v 13:23,
   výsledek ve 23:23 a záloha v 0:53. Když výsledek ještě nesedí ve dvou zdrojích, přijde zpráva a zkusí se to znovu.
@@ -123,7 +124,7 @@ Bez nového nastavení (Claude API, R2, Telegram jako u ostatních).
   a čistá konta brankářů („nula“). České zdroje hledají po hráčích ze seznamu v `data/prehledy/cizina.json`
   (po přestupech ho uprav), mezinárodní zdroje pak ověří nalezené zápasy; do grafiky jde jen to, co sedí v obou.
   Vypnuté: tenis (kvůli ceně) a hokejoví legionáři (česká média o nich zápas po zápasu nepíšou). Ručně jdou spustit,
-  zapnou se vrácením řádku `cron` v `prehledy.yml`.
+  zapnou se řádkem v rozvrhu bota (`PLAN` ve `worker/src/index.ts`).
 - Zkouška na minulém dni: Run workflow s datem a vypnutým odesláním (nic se nenahraje ani nepošle).
 
 ## Token

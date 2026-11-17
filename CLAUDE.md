@@ -24,7 +24,11 @@ komentáře česky.
 5. `.github/workflows/specialy.yml` dělá speciál k velké akci Čecha podle `data/specialy/*.json`: odpoledne pozvánku,
    po zápase výsledek (`src/special.ts`, šablona `src/render/special.ts`). Fakta ze dvou nezávislých hledání
    (mezinárodní a české zdroje), kód je porovná údaj po údaji. Obě verze se schvalují v Telegramu.
-6. Nastavení (secrets, R2, token) je v `docs/nastaveni.md`.
+6. **Plán spouští bot `venca-bot`** (Cloudflare Cron Trigger v `worker/wrangler.jsonc`, rozvrh `PLAN` ve
+   `worker/src/index.ts`): v danou minutu spustí úlohu přes `workflow_dispatch` se vstupem `plan` (= cron) a úloha
+   se podle něj chová jako plánovaná. GitHub `on: schedule` se v tomto repozitáři nespouštěl (17. 11. 2026 ráno nic),
+   proto v úlohách není. Ruční běh Ranního piva nikdy nevydává sám (`AUTO_RANNI_PIVO` platí jen pro plán).
+7. Nastavení (secrets, R2, token) je v `docs/nastaveni.md`.
 
 ## Pravidla (povinná)
 
@@ -97,7 +101,8 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
 - Fakta: dvě hledání (`zdroje_a` mezinárodní, `zdroje_b` české), každý údaj musí sedět v obou, odkazy musí být
   z povolených webů a z výsledků hledání. Časy převádí kód (`toPrague`), ne AI. U výsledku se hledá postupně
   (české zdroje jen když mezinárodní výsledek už mají).
-- Další akce = nový JSON v `data/specialy/` a řádky `cron` ve `specialy.yml`. Zkouška celé cesty na minulém zápase:
+- Další akce = nový JSON v `data/specialy/` a řádky v `PLAN` (`worker/src/index.ts`; nová minuta i do
+  `worker/wrangler.jsonc`). Zkouška celé cesty na minulém zápase:
   `zkouska-2026-04-11-ufc327` (ručně, bez odeslání).
 
 ### Fotbalová 1. liga a přehledy (od 16. 11. 2026)
@@ -111,7 +116,7 @@ Plán příspěvků se dá ukázat na publeague.eu/venca_stamgast/ (statická st
   v lednu a v létě), mezinárodní (A) dostanou jen to, které zápasy ověřit (hráč, tým, soutěž, den, soupeř) a čísla
   (skóre, výsledek, góly, asistence) dohledají samy. Do grafiky jde jen to, co sedí v obou. Když B nic nenajde,
   A se nespouští.
-- Vypnuté (rozhodnutí majitele 17. 11. 2026, zapínají se řádkem `cron`): tenis denně 9:23 kvůli ceně
+- Vypnuté (rozhodnutí majitele 17. 11. 2026, zapínají se řádkem v `PLAN` bota): tenis denně 9:23 kvůli ceně
   (`data/prehledy/tenis.json`, období do konce Australian Open) a hokejoví legionáři (SHL, Liiga, DEL, National
   League, ICEHL, AHL; **KHL nikdy**), protože česká média o nich zápas po zápasu nepíšou; NHL je v Ranním pivu.
 

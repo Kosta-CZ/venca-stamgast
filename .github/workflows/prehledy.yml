@@ -1,6 +1,6 @@
 # Přehledy ze dvou zdrojů (data/prehledy/*.json): Češi ve fotbale v cizině v pondělí. Vypnuté (rozhodnutí majitele
 # 17. 11. 2026): tenis (denně) kvůli ceně a hokejoví legionáři, protože česká média o nich zápas po zápasu nepíšou
-# (NHL je v Ranním pivu). Ručně jdou spustit dál, zapnou se vrácením řádku cron.
+# (NHL je v Ranním pivu). Ručně jdou spustit dál, zapnou se řádkem v rozvrhu bota (PLAN ve worker/src/index.ts).
 # Výkony najde Claude API v českých zdrojích (po hráčích ze seznamu), mezinárodní zdroje je ověří (čísla dohledají
 # samy); do grafiky jde jen to, co sedí v obou. Koncept jde ke schválení do Telegramu (✅ Vydat / 🗑 Zahodit,
 # vydává vydat.yml), nikdy nevychází sám.
@@ -10,10 +10,11 @@
 name: Přehledy
 
 on:
-  schedule:
-    # - cron: '23 8 * * *'  # tenis: 9:23 v zimě, včerejší zápasy (zatím vypnutý kvůli ceně)
-    # - cron: '23 9 * * 1'  # legionáři: pondělí 10:23, minulý týden (vypnutí: nejsou zdroje)
-    - cron: '23 10 * * 1'   # Češi v cizině: pondělí 11:23, minulý týden
+  # Plán spouští bot venca-bot (rozvrh PLAN ve worker/src/index.ts) se vstupem plan; on: schedule se tu
+  # nespouštěl. Časy (vypnuté v rozvrhu nejsou):
+  #   - cron: '23 8 * * *'  # tenis: 9:23 v zimě, včerejší zápasy (zatím vypnutý kvůli ceně)
+  #   - cron: '23 9 * * 1'  # legionáři: pondělí 10:23, minulý týden (vypnutí: nejsou zdroje)
+  #   - cron: '23 10 * * 1'   # Češi v cizině: pondělí 11:23, minulý týden
   workflow_dispatch:
     inputs:
       prehled:
@@ -28,6 +29,10 @@ on:
         description: 'Poslat ke schválení (Telegram, jinak issue)'
         type: boolean
         default: true
+      plan:
+        description: 'Plánovaný běh (vyplňuje bot podle rozvrhu; ručně nech prázdné)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -42,6 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      PLAN: ${{ github.event.schedule || inputs.plan }}
       R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
       R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
       R2_BUCKET: ${{ vars.R2_BUCKET }}
@@ -54,7 +60,7 @@ jobs:
       - name: Který přehled
         id: what
         env:
-          SCHEDULE: ${{ github.event.schedule }}
+          SCHEDULE: ${{ env.PLAN }}
           INPUT_ID: ${{ inputs.prehled }}
         run: |
           case "$SCHEDULE" in
@@ -86,7 +92,7 @@ jobs:
           VENCA_MODEL: ${{ vars.VENCA_MODEL }}
           ID: ${{ steps.what.outputs.id }}
           DATE: ${{ inputs.date }}
-          SCHEDULED: ${{ github.event_name == 'schedule' }}
+          SCHEDULED: ${{ env.PLAN != '' }}
         run: |
           args=(--id "$ID")
           [ -n "$DATE" ] && args+=(--date "$DATE")
@@ -107,11 +113,11 @@ jobs:
       - name: Nahrání do úložiště
         id: upload
         # Zkušební běh bez odeslání nic nenahrává: koncept zůstane jen v artefaktu běhu.
-        if: steps.make.outputs.has_post == 'true' && vars.R2_PUBLIC_URL != '' && (github.event_name == 'schedule' || inputs.send)
+        if: steps.make.outputs.has_post == 'true' && vars.R2_PUBLIC_URL != '' && (env.PLAN != '' || inputs.send)
         run: npm run -s venca -- upload --id "${{ steps.make.outputs.id }}"
 
       - name: Ke schválení (Telegram / issue)
-        if: steps.make.outputs.has_post == 'true' && (github.event_name == 'schedule' || inputs.send)
+        if: steps.make.outputs.has_post == 'true' && (env.PLAN != '' || inputs.send)
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -133,7 +139,7 @@ jobs:
 
       # Týdenní přehled bez ověřeného výkonu: krátká zpráva (u tenisu je prázdný den běžný, ten mlčí).
       - name: Nic ověřeného
-        if: steps.make.outputs.reason == 'empty' && steps.what.outputs.id != 'tenis' && (github.event_name == 'schedule' || inputs.send)
+        if: steps.make.outputs.reason == 'empty' && steps.what.outputs.id != 'tenis' && (env.PLAN != '' || inputs.send)
         env:
           NAZEV: ${{ steps.make.outputs.nazev }}
           WHY: ${{ steps.make.outputs.why }}

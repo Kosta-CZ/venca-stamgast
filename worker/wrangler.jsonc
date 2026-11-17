@@ -11,5 +11,10 @@
   },
   "observability": {
     "enabled": true
+  },
+  // Plánovač: bot se budí v těchto minutách každé hodiny (UTC) a spustí úlohy z rozvrhu PLAN
+  // v src/index.ts. Nový čas v jiné minutě = přidat minutu sem.
+  "triggers": {
+    "crons": ["10,23,41,53 * * * *"]
   }
 }

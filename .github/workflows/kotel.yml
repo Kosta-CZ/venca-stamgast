@@ -11,11 +11,12 @@
 name: Extraligový kotel
 
 on:
-  schedule:
-    # Sobota 6:41 UTC (7:41 v zimě). Když v datech ještě chybí páteční výsledky, počká na zálohu.
-    - cron: '41 6 * * 6'
-    # Záloha 9:41 UTC: vyrobí koncept, pokud ho ranní běh nevyrobil (i s chybějícími výsledky, ty půjdou do „pozor“).
-    - cron: '41 9 * * 6'
+  # Plán spouští bot venca-bot (rozvrh PLAN ve worker/src/index.ts) se vstupem plan; on: schedule se tu
+  # nespouštěl. Časy:
+  # # Sobota 6:41 UTC (7:41 v zimě). Když v datech ještě chybí páteční výsledky, počká na zálohu.
+  # - cron: '41 6 * * 6'
+  # # Záloha 9:41 UTC: vyrobí koncept, pokud ho ranní běh nevyrobil (i s chybějícími výsledky, ty půjdou do „pozor“).
+  # - cron: '41 9 * * 6'
   workflow_dispatch:
     inputs:
       round:
@@ -29,6 +30,10 @@ on:
         description: 'Poslat ke schválení (Telegram, jinak issue)'
         type: boolean
         default: true
+      plan:
+        description: 'Plánovaný běh (vyplňuje bot podle rozvrhu; ručně nech prázdné)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -43,6 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
+      PLAN: ${{ github.event.schedule || inputs.plan }}
       R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
       R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
       R2_BUCKET: ${{ vars.R2_BUCKET }}
@@ -67,11 +73,11 @@ jobs:
       - name: Výroba Kotle
         id: make
         env:
-          ANTHROPIC_API_KEY: ${{ (github.event_name == 'schedule' || inputs.ai) && secrets.ANTHROPIC_API_KEY || '' }}
+          ANTHROPIC_API_KEY: ${{ (env.PLAN != '' || inputs.ai) && secrets.ANTHROPIC_API_KEY || '' }}
           VENCA_MODEL: ${{ vars.VENCA_MODEL }}
           ROUND: ${{ inputs.round }}
-          EARLY: ${{ github.event.schedule == '41 6 * * 6' }}
-          SCHEDULED: ${{ github.event_name == 'schedule' }}
+          EARLY: ${{ env.PLAN == '41 6 * * 6' }}
+          SCHEDULED: ${{ env.PLAN != '' }}
         run: |
           args=()
           [ -n "$ROUND" ] && args+=(--round "$ROUND")
@@ -93,11 +99,11 @@ jobs:
       - name: Nahrání do úložiště
         id: upload
         # Zkušební běh bez odeslání nic nenahrává: koncept zůstane jen v artefaktu běhu.
-        if: steps.make.outputs.has_post == 'true' && vars.R2_PUBLIC_URL != '' && (github.event_name == 'schedule' || inputs.send)
+        if: steps.make.outputs.has_post == 'true' && vars.R2_PUBLIC_URL != '' && (env.PLAN != '' || inputs.send)
         run: npm run -s venca -- upload --id "${{ steps.make.outputs.id }}"
 
       - name: Ke schválení (Telegram / issue)
-        if: steps.make.outputs.has_post == 'true' && (github.event_name == 'schedule' || inputs.send)
+        if: steps.make.outputs.has_post == 'true' && (env.PLAN != '' || inputs.send)
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -118,7 +124,7 @@ jobs:
           gh issue create --title "$title" --label ke-schvaleni --body-file "$RUNNER_TEMP/body.md" --assignee "${{ github.repository_owner }}"
 
       - name: Tento týden bez nového kola
-        if: steps.make.outputs.reason == 'exists' && github.event.schedule == '41 6 * * 6'
+        if: steps.make.outputs.reason == 'exists' && env.PLAN == '41 6 * * 6'
         env:
           ROUND: ${{ steps.make.outputs.round }}
         run: |
