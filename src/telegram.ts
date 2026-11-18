@@ -21,21 +21,31 @@ export function tgEscape(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export async function tgCall<T = unknown>(io: TgIo, method: string, body: Record<string, unknown>): Promise<T> {
+async function tgSend<T>(io: TgIo, method: string, init: RequestInit): Promise<T> {
   const safe = (t: string) => t.split(io.token).join('***');
   let res: Response;
   try {
-    res = await io.fetch(`${TG_API}/bot${io.token}/${method}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    res = await io.fetch(`${TG_API}/bot${io.token}/${method}`, { method: 'POST', ...init });
   } catch (e) {
     throw new Error(safe(`Telegram neodpověděl: ${e instanceof Error ? e.message : String(e)}`));
   }
   const json = (await res.json().catch(() => null)) as { ok?: boolean; result?: T; description?: string } | null;
   if (!res.ok || !json?.ok) throw new Error(safe(`Telegram odmítl ${method}: ${json?.description ?? `stav ${res.status}`}`));
   return json.result as T;
+}
+
+export const tgCall = <T = unknown>(io: TgIo, method: string, body: Record<string, unknown>): Promise<T> =>
+  tgSend<T>(io, method, { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+/**
+ * Volání s nahráním souboru (multipart): obrázek jde přímo z běhu úlohy. Telegram si ho pak nemusí
+ * stahovat z veřejné adresy R2 (r2.dev je omezená a 18. 11. ráno ji Telegram nestáhl).
+ */
+export function tgUpload<T = unknown>(io: TgIo, method: string, fields: Record<string, unknown>, file: { field: string; name: string; data: Uint8Array; type: string }): Promise<T> {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(fields)) if (v !== undefined) form.append(k, typeof v === 'string' ? v : JSON.stringify(v));
+  form.append(file.field, new Blob([file.data.slice()], { type: file.type }), file.name);
+  return tgSend<T>(io, method, { body: form });
 }
 
 /** Tlačítka pod konceptem. Data tlačítka čte Worker (`vydat:<id>`, `zahodit:<id>`), limit Telegramu je 64 bajtů. */
@@ -97,17 +107,28 @@ export function approvalText(d: Draft): string {
 /**
  * Pošle koncept ke schválení. Krátký text jde jako popisek fotky s tlačítky; delší jako fotka
  * s hlavičkou a pod ní samostatná zpráva s celým textem a tlačítky.
+ *
+ * Fotka jde přednostně jako soubor z běhu (`photo`), jinak z veřejné adresy R2. Když si ji Telegram
+ * z adresy nestáhne, přijde koncept aspoň jako text s tlačítky a odkazem na obrázek: schválit jde i tak.
  */
-export async function sendApproval(io: TgIo, chatId: string, d: Draft): Promise<void> {
-  if (!d.imageUrl) throw new Error('Koncept nemá veřejný obrázek, do Telegramu ho nejde poslat.');
+export async function sendApproval(io: TgIo, chatId: string, d: Draft, photo?: Uint8Array): Promise<void> {
+  if (!photo && !d.imageUrl) throw new Error('Koncept nemá obrázek (soubor ani veřejnou adresu), do Telegramu ho nejde poslat.');
   const text = approvalText(d);
   const keyboard = approvalKeyboard(d.id);
-  if (text.length <= PHOTO_CAPTION_MAX) {
-    await tgCall(io, 'sendPhoto', { chat_id: chatId, photo: d.imageUrl, caption: text, parse_mode: 'HTML', reply_markup: keyboard });
+  const short = text.length <= PHOTO_CAPTION_MAX;
+  const fields = short
+    ? { chat_id: chatId, caption: text, parse_mode: 'HTML', reply_markup: keyboard }
+    : { chat_id: chatId, caption: approvalHeader(d), parse_mode: 'HTML' };
+  try {
+    if (photo) await tgUpload(io, 'sendPhoto', fields, { field: 'photo', name: `${d.id}.jpg`, data: photo, type: 'image/jpeg' });
+    else await tgCall(io, 'sendPhoto', { ...fields, photo: d.imageUrl });
+  } catch (e) {
+    if (photo || !d.imageUrl) throw e;
+    console.log(`Fotku z adresy Telegram nevzal (${e instanceof Error ? e.message : String(e)}), posílám koncept jako text.`);
+    await tgCall(io, 'sendMessage', { chat_id: chatId, text: `${text}\n\n🖼 <a href="${tgAttr(d.imageUrl)}">Obrázek konceptu</a>`, parse_mode: 'HTML', reply_markup: keyboard });
     return;
   }
-  await tgCall(io, 'sendPhoto', { chat_id: chatId, photo: d.imageUrl, caption: approvalHeader(d), parse_mode: 'HTML' });
-  await tgCall(io, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', reply_markup: keyboard, link_preview_options: { is_disabled: true } });
+  if (!short) await tgCall(io, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', reply_markup: keyboard, link_preview_options: { is_disabled: true } });
 }
 
 /** Krátká zpráva (volitelně jako odpověď na zprávu s konceptem, volitelně s tlačítky). */

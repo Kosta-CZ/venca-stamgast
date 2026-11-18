@@ -62,6 +62,36 @@ describe('Telegram: zpráva ke schválení', () => {
     expect(calls[0]!.body.reply_markup).toBeTruthy();
   });
 
+  it('obrázek z běhu jde jako soubor (Telegram si nic nestahuje z r2.dev)', async () => {
+    const sent: { url: string; form: FormData }[] = [];
+    const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      sent.push({ url: String(url), form: init!.body as FormData });
+      return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+    }) as unknown as typeof fetch;
+    await sendApproval({ fetch: f, token: 'T0K' }, '42', draft, new Uint8Array([0xff, 0xd8, 0xff]));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.url).toContain('/sendPhoto');
+    const photo = sent[0]!.form.get('photo') as File;
+    expect(photo.name).toBe(`${draft.id}.jpg`);
+    expect(photo.type).toBe('image/jpeg');
+    expect(new Uint8Array(await photo.arrayBuffer())).toEqual(new Uint8Array([0xff, 0xd8, 0xff]));
+    expect(sent[0]!.form.get('chat_id')).toBe('42');
+    expect(JSON.parse(String(sent[0]!.form.get('reply_markup')))).toEqual(approvalKeyboard(draft.id));
+  });
+
+  it('když si Telegram fotku z adresy nestáhne, přijde koncept jako text s tlačítky a odkazem', async () => {
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+      const photoFails = String(url).endsWith('/sendPhoto');
+      return new Response(JSON.stringify(photoFails ? { ok: false, description: 'Bad Request: failed to get HTTP URL content' } : { ok: true, result: {} }), { status: photoFails ? 400 : 200 });
+    }) as unknown as typeof fetch;
+    await sendApproval({ fetch: f, token: 'T0K' }, '42', draft);
+    expect(calls.map((c) => c.url.split('/').pop())).toEqual(['sendPhoto', 'sendMessage']);
+    expect(calls[1]!.body.reply_markup).toEqual(approvalKeyboard(draft.id));
+    expect(String(calls[1]!.body.text)).toContain(`<a href="${draft.imageUrl}">Obrázek konceptu</a>`);
+  });
+
   it('dlouhý text jde do druhé zprávy s tlačítky', async () => {
     const { f, calls } = fakeFetch();
     await sendApproval({ fetch: f, token: 'T0K' }, '42', { ...draft, caption: 'x'.repeat(PHOTO_CAPTION_MAX) });

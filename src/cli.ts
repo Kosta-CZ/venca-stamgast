@@ -249,8 +249,11 @@ async function telegram(): Promise<void> {
   if (!id) throw new Error('Chybí --id.');
   const tg = tgFromEnv();
   if (!tg) throw new Error('Telegram není nastavený (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID).');
-  await sendApproval({ fetch, token: tg.token }, tg.chatId, readDraft(id));
-  console.log('Koncept je v Telegramu ke schválení.');
+  // Obrázek jde přímo jako soubor z tohoto běhu (Telegram si ho pak nestahuje z r2.dev).
+  const file = join(OUT, `${id}.jpg`);
+  const photo = existsSync(file) ? readFileSync(file) : undefined;
+  await sendApproval({ fetch, token: tg.token }, tg.chatId, readDraft(id), photo);
+  console.log(`Koncept je v Telegramu ke schválení${photo ? ' (obrázek poslaný jako soubor)' : ''}.`);
 }
 
 async function notify(): Promise<void> {
