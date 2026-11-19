@@ -128,7 +128,16 @@ export interface Refreshed {
 /** Prodlouží token Instagramu o 60 dní; u tokenu Facebooku jen ověří platnost. */
 export async function refreshToken(io: IgIo, now: number = Date.now() / 1000): Promise<Refreshed> {
   if (apiHost(io.token) === FB_API) {
-    const info = await igCall<{ data?: { is_valid?: boolean; expires_at?: number } }>(io, 'GET', `debug_token?input_token=${encodeURIComponent(io.token)}`);
+    let info: { data?: { is_valid?: boolean; expires_at?: number } };
+    try {
+      info = await igCall(io, 'GET', `debug_token?input_token=${encodeURIComponent(io.token)}`);
+    } catch (e) {
+      // debug_token smí volat jen vývojář aplikace (kód 100); token z Unified loginu, který tu není od
+      // vývojáře, se pak ověří obyčejným voláním. Platnost nejde zjistit, takový token ale nevyprší.
+      if (!(e instanceof IgError) || e.code !== 100) throw e;
+      await igCall<{ id?: string }>(io, 'GET', 'me?fields=id');
+      return { token: io.token, changed: false, days: null };
+    }
     if (!info.data || info.data.is_valid === false) throw new IgError('Token už neplatí: vystav nový a ulož ho do tajemství IG_ACCESS_TOKEN.', 190);
     const until = info.data.expires_at ?? 0;
     return { token: io.token, changed: false, days: until > 0 ? Math.max(0, Math.floor((until - now) / 86400)) : null };
