@@ -41,6 +41,8 @@ komentáře česky.
    ani politika; postava je vždy označená jako AI (popisek i grafika).
    Venca má paměť: do zadání dostane posledních 12 hlášek (R2 `venca/posledni-hlasky.json`, ukládá je `upload`,
    `src/memory.ts`) a opakovaný obrat (4+ slov, např. „Jardo, ani nic neříkej“ třikrát za sebou) jde do `pozor`.
+   Jarda (soused od vedlejšího stolu) je zatím jen v životopisu: fanoušci ho neznají, do textů nepatří, dokud ho
+   nepředstaví formát Venca vs. Jarda (rozhodnutí majitele 19. 11. 2026); zmínka jde do `pozor` (`jardaNotes`).
 4. **Výrazy Vency** jsou v `src/render/avatar.ts` (stejná kresba jako charakterový list). Gesta rukou
    jen taková, která nejdou vyložit jako urážka.
 5. **Tajné údaje jen v GitHub Secrets.** Nikdy je nevypisovat; chyby od Instagramu token maskují.

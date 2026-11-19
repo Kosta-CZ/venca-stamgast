@@ -88,6 +88,19 @@ export function sponsorNotes(texts: Record<string, string>): string[] {
   });
 }
 
+/**
+ * Jarda (hokejový fanda od vedlejšího stolu) je zatím jen ve Vencově životopisu: fanoušci ho neznají
+ * (připomínka majitele 19. 11. 2026), takže do textů nepatří, dokud ho nepředstaví formát Venca vs. Jarda.
+ */
+const JARDA = /(?<!\p{L})jard\p{L}*/iu;
+
+export function jardaNotes(texts: Record<string, unknown>): string[] {
+  return Object.entries(texts).flatMap(([where, text]) => {
+    const m = typeof text === 'string' ? JARDA.exec(text) : null;
+    return m ? [`Text v ${where} zmiňuje Jardu („${m[0]}“), kterého fanoušci zatím neznají.`] : [];
+  });
+}
+
 /** Poznámky, které Venca sám vrátil v poli `pozor`. */
 export const vencaNotes = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim() !== '').map((x) => `Venca: ${x.trim()}`) : [];

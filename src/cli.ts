@@ -24,7 +24,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, write
 import { join } from 'node:path';
 import { postFacts } from './facts.ts';
 import { fetchNight, nhlDateFor, type CzPlayer, type Night } from './nhl.ts';
-import { caption, checkVenca, dayLabel, fallbackVenca, parseJsonLoose, userMessage, type VencaOut } from './venca.ts';
+import { caption, checkVenca, dayLabel, fallbackVenca, jardaNotes, parseJsonLoose, userMessage, type VencaOut } from './venca.ts';
 import { askClaude, DEFAULT_MODEL, spend, usdText, type ClaudeIo } from './claude.ts';
 import { draftId, issueBody, issueTitle, type Draft } from './draft.ts';
 import { ranniPivoHtml, SIZE } from './render/ranniPivo.ts';
@@ -91,8 +91,9 @@ async function askVenca(io: ClaudeIo, user: string, pozor: string[]): Promise<un
     console.log(`Začátek odpovědi: ${JSON.stringify(text.slice(0, 600))}`);
     return {};
   }
-  const hlaska = (raw as { hlaska?: unknown } | null)?.hlaska;
-  if (typeof hlaska === 'string') pozor.push(...repeatNotes(hlaska, recent));
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  if (typeof o.hlaska === 'string') pozor.push(...repeatNotes(o.hlaska, recent));
+  pozor.push(...jardaNotes({ titulku: o.titulek, hlášce: o.hlaska, popisku: o.popisek }));
   return raw;
 }
 

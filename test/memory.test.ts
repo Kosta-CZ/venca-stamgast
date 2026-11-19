@@ -58,3 +58,12 @@ describe('paměť hlášek', () => {
     expect(await loadRecent(drafts)).toEqual([]);
   });
 });
+
+describe('Jarda v textech', () => {
+  it('zmínku o Jardovi (fanoušci ho zatím neznají) kód pošle ke kontrole, jiná slova ne', async () => {
+    const { jardaNotes } = await import('../src/venca.ts');
+    expect(jardaNotes({ hlášce: 'Tři góly v Brně. Jardo, ani nic neříkej.' })).toEqual(['Text v hlášce zmiňuje Jardu („Jardo“), kterého fanoušci zatím neznají.']);
+    expect(jardaNotes({ popisku: 'Tohle by Jardovi nevysvětlil nikdo.', titulku: 'Kubala zlomil Zbrojovku' })).toHaveLength(1);
+    expect(jardaNotes({ hlášce: 'Hajdy na Jadran, kluci.', popisku: undefined })).toEqual([]);
+  });
+});
