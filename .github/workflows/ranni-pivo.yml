@@ -40,6 +40,13 @@ jobs:
     timeout-minutes: 20
     env:
       PLAN: ${{ github.event.schedule || inputs.plan }}
+      # R2 už při výrobě: Venca dostane své poslední hlášky (paměť v venca/posledni-hlasky.json).
+      R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     steps:
       - uses: actions/checkout@v4
 

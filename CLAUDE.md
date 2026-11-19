@@ -39,6 +39,8 @@ komentáře česky.
    Názorové formáty (hodnocení, Venca vs. Jarda) se vždy schvalují.
 3. **Bible postavy je `prompts/system.md`.** Výkon ano, člověk ne; žádné soukromí, zranění, sázení
    ani politika; postava je vždy označená jako AI (popisek i grafika).
+   Venca má paměť: do zadání dostane posledních 12 hlášek (R2 `venca/posledni-hlasky.json`, ukládá je `upload`,
+   `src/memory.ts`) a opakovaný obrat (4+ slov, např. „Jardo, ani nic neříkej“ třikrát za sebou) jde do `pozor`.
 4. **Výrazy Vency** jsou v `src/render/avatar.ts` (stejná kresba jako charakterový list). Gesta rukou
    jen taková, která nejdou vyložit jako urážka.
 5. **Tajné údaje jen v GitHub Secrets.** Nikdy je nevypisovat; chyby od Instagramu token maskují.

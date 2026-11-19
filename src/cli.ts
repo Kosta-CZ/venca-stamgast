@@ -45,6 +45,7 @@ import {
 import { specialHtml } from './render/special.ts';
 import { checkImage, publishImage, prepareContainer, refreshToken } from './instagram.ts';
 import { dirStore, putObject, r2FromEnv, r2Store, type Store } from './storage.ts';
+import { loadRecent, RECENT_KEY, recentBlock, repeatNotes, withLine } from './memory.ts';
 import { sendApproval, sendNote, tgEscape, tgFromEnv } from './telegram.ts';
 
 const ROOT = new URL('..', import.meta.url).pathname;
@@ -71,22 +72,28 @@ export function pragueToday(at = new Date()): string {
  */
 async function askVenca(io: ClaudeIo, user: string, pozor: string[]): Promise<unknown> {
   const system = readFileSync(join(ROOT, 'prompts/system.md'), 'utf8');
+  // Paměť: posledních pár hlášek (každé volání je jinak bez paměti a Venca by opakoval stejnou hlášku).
+  const recent = await loadRecent(roundStore(), pragueToday());
   let text: string;
   try {
-    text = await askClaude(io, system, user, console.log);
+    text = await askClaude(io, system, user + recentBlock(recent), console.log);
   } catch (e) {
     const why = e instanceof Error ? e.message : String(e);
     console.log(`Texty Vency bez AI: ${why}`);
     pozor.push(`Texty jsou bez AI (suché), Claude API selhalo: ${why}`);
     return null;
   }
+  let raw: unknown;
   try {
-    return parseJsonLoose(text);
+    raw = parseJsonLoose(text);
   } catch (e) {
     console.log(`Venca vrátil nečitelnou odpověď: ${e instanceof Error ? e.message : String(e)}`);
     console.log(`Začátek odpovědi: ${JSON.stringify(text.slice(0, 600))}`);
     return {};
   }
+  const hlaska = (raw as { hlaska?: unknown } | null)?.hlaska;
+  if (typeof hlaska === 'string') pozor.push(...repeatNotes(hlaska, recent));
+  return raw;
 }
 
 /** Suché texty po selhání API: obecná poznámka „zkouška bez klíče“ by mátla, skutečný důvod už je v `pozor`. */
@@ -172,6 +179,13 @@ async function upload(): Promise<void> {
   await putObject(cfg, `drafts/${id}.json`, JSON.stringify(draft, null, 2), 'application/json');
   console.log(`Nahráno: ${draft.imageUrl}`);
   output('image_url', draft.imageUrl);
+  // Hláška odeslaného konceptu do paměti Vency (zkušební běhy bez odeslání nic nenahrávají, paměť nekazí).
+  try {
+    const store = r2Store(cfg);
+    await store.put(RECENT_KEY, JSON.stringify(withLine(await loadRecent(store, pragueToday()), { id, hlaska: draft.venca.hlaska }), null, 2));
+  } catch (e) {
+    console.log(`Paměť hlášek se neuložila: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 function issue(): void {
