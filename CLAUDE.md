@@ -28,7 +28,9 @@ komentáře česky.
    `worker/src/index.ts`): v danou minutu spustí úlohu přes `workflow_dispatch` se vstupem `plan` (= cron) a úloha
    se podle něj chová jako plánovaná. GitHub `on: schedule` se v tomto repozitáři nespouštěl (17. 11. 2026 ráno nic),
    proto v úlohách není. Ruční běh Ranního piva nikdy nevydává sám (`AUTO_RANNI_PIVO` platí jen pro plán).
-7. Nastavení (secrets, R2, token) je v `docs/nastaveni.md`.
+7. **Rozvrh je pozastavený** (rozhodnutí majitele 19. 11. 2026, „ani jeden post nikdo neviděl“): `PAUSED` v
+   `worker/wrangler.jsonc` je `"true"`, bot sám nic nespouští. Zapnutí: `"false"` a push do main. Ruční běhy jdou dál.
+8. Nastavení (secrets, R2, token) je v `docs/nastaveni.md`.
 
 ## Pravidla (povinná)
 

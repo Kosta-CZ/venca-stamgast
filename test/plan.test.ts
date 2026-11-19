@@ -73,6 +73,16 @@ describe('rozvrh bota', () => {
     expect(calls[1]!.body.text).toContain('403');
   });
 
+  it('pozastavený rozvrh: Cron Trigger nic nespustí', async () => {
+    const tasks: Promise<unknown>[] = [];
+    const f = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', f);
+    await worker.scheduled({ scheduledTime: Date.parse('2026-11-20T06:10:00Z'), cron: '10,23,41,53 * * * *' }, { ...env, PAUSED: 'true' }, { waitUntil: (p) => tasks.push(p) });
+    await Promise.all(tasks);
+    expect(f).not.toHaveBeenCalled();
+    expect(readFileSync(new URL('../worker/wrangler.jsonc', import.meta.url), 'utf8')).toContain('"PAUSED": "true"');
+  });
+
   it('Cron Trigger: scheduled spustí rozvrh na pozadí', async () => {
     const tasks: Promise<unknown>[] = [];
     const f = vi.fn(async () => new Response(null, { status: 204 }));

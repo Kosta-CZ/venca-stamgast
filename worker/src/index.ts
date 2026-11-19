@@ -17,6 +17,8 @@ export interface Env {
   BOT_GITHUB_TOKEN: string;
   /** Repozitář ve tvaru vlastník/název. */
   GITHUB_REPO: string;
+  /** „true“ = rozvrh je pozastavený, bot sám nic nespouští (tlačítka v Telegramu fungují dál). */
+  PAUSED?: string;
 }
 
 interface Ctx {
@@ -213,6 +215,10 @@ export async function handleUpdate(update: TgUpdate, env: Env): Promise<void> {
 export default {
   /** Cloudflare Cron Trigger (worker/wrangler.jsonc): v plánovanou minutu spustí úlohy z rozvrhu. */
   async scheduled(event: { scheduledTime: number; cron: string }, env: Env, ctx: Ctx): Promise<void> {
+    if (env.PAUSED === 'true') {
+      console.log('Rozvrh je pozastavený (PAUSED v worker/wrangler.jsonc), nic nespouštím.');
+      return;
+    }
     ctx.waitUntil(runPlan(new Date(event.scheduledTime), env).catch((e: unknown) => console.log(`Chyba plánu: ${e instanceof Error ? e.message : String(e)}`)));
   },
 

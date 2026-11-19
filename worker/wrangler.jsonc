@@ -7,7 +7,10 @@
   "workers_dev": true,
   "preview_urls": false,
   "vars": {
-    "GITHUB_REPO": "Kosta-CZ/venca-stamgast"
+    "GITHUB_REPO": "Kosta-CZ/venca-stamgast",
+    // Rozvrh pozastavený (rozhodnutí majitele 19. 11. 2026): bot sám nic nespouští.
+    // Znovu zapnout: "false" a push do main (bot.yml bota nasadí sám).
+    "PAUSED": "true"
   },
   "observability": {
     "enabled": true
